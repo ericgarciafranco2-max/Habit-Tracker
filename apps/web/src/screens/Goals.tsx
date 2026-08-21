@@ -10,7 +10,8 @@ import {
   type Milestone,
 } from '@habit/core';
 import { useStore } from '../store/store.js';
-import { Bar, Empty, Sheet, useConfirm } from '../components/ui.js';
+import { Empty, Meter, Sheet, useConfirm } from '../components/ui.js';
+import { Icon } from '../components/Icon.js';
 import { pct } from '../lib/format.js';
 
 /**
@@ -41,10 +42,13 @@ export function Goals() {
   return (
     <>
       {node}
-      <div className="row" style={{ marginBottom: 12 }}>
-        <h1 style={{ flex: 1 }}>Objetivos</h1>
-        <button className="btn primary small" onClick={() => setEditing(blank())}>
-          + Nuevo
+      <div className="page-head row">
+        <div style={{ flex: 1 }}>
+          <h1 className="title-lg">Objetivos</h1>
+          <div className="sub">El para que de todo lo demas.</div>
+        </div>
+        <button className="btn tinted small" onClick={() => setEditing(blank())}>
+          <Icon name="plus" size={15} /> Nuevo
         </button>
       </div>
 
@@ -82,15 +86,15 @@ export function Goals() {
               </button>
             </div>
             {g.why && <p className="small muted">“{g.why}”</p>}
-            <div className="row tiny" style={{ marginBottom: 4 }}>
-              <span style={{ flex: 1 }}>
-                {g.metricTarget != null
+            <Meter
+              label={
+                g.metricTarget != null
                   ? `${g.metricCurrent ?? 0} / ${g.metricTarget} ${g.metricUnit ?? ''}`
-                  : `${doneMs}/${g.milestones.length} hitos`}
-              </span>
-              <span className="mono bold">{pct(progress)}</span>
-            </div>
-            <Bar value={progress} />
+                  : `${doneMs} de ${g.milestones.length} hitos`
+              }
+              value={progress}
+              right={pct(progress)}
+            />
 
             {g.milestones.length > 0 && (
               <div style={{ marginTop: 10 }}>

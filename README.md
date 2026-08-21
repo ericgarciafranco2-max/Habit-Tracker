@@ -13,6 +13,8 @@ Lo que lo diferencia de una plantilla de Excel o de otra app de rachas:
 - **Rituales de apertura y cierre** del dia, obligatorios.
 - **Modo estricto**: no se reescribe el pasado ni se abandona un habito en caliente.
 - **Planificador universitario** que reparte el estudio por tus huecos reales.
+- **Metodos**: 20 tecnicas de disciplina, foco y estudio, cada una con como se
+  aplica dentro de la app, y frases de gente que construyo algo.
 
 La explicacion completa del metodo esta en [`docs/GUIA.md`](docs/GUIA.md).
 
@@ -93,6 +95,28 @@ Toda la logica que decide si un dia esta cumplido, cuanta deuda generas o que se
 estudia manana vive en `packages/core`, sin React ni DOM. Por eso se puede
 probar con tests rapidos y por eso el servidor puede reutilizar exactamente la
 misma funcion de mezcla que el cliente.
+
+### Diseño y graficas
+
+La interfaz es deliberadamente sobria: superficies blancas sobre gris, una sola
+tinta de acento, separadores finos en vez de cajas, tipografia del sistema y
+radios generosos. Modo claro y oscuro, los dos elegidos, no uno invertido.
+
+Las graficas siguen tres reglas que evitan casi todos los errores tipicos:
+
+- **La forma la elige el trabajo del dato.** Una razon contra su limite es un
+  medidor (los anillos de Hoy, en pequeños multiples y nunca concentricos);
+  comparar magnitud en el tiempo son columnas; el reparto de un total es una
+  barra apilada; una rejilla de magnitud es un mapa de calor.
+- **Nunca dos escalas en un mismo eje.** Animo y horas de sueño van en dos
+  graficas separadas a proposito.
+- **Los porcentajes se dibujan sobre 0–100, no sobre el maximo de la muestra**,
+  para que un mes al 1% no parezca un mes lleno.
+
+La paleta categorica son ocho tonos en orden fijo, validados en los dos modos
+contra las comprobaciones de banda de luminosidad, croma, separacion para
+daltonismo y contraste minimo sobre la superficie. Estan en
+`apps/web/src/lib/palette.ts`, con su version clara y su version oscura.
 
 ### Decisiones que quiza no son obvias
 

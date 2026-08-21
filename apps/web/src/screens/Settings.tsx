@@ -13,7 +13,7 @@ import {
 } from '@habit/core';
 import { useStore } from '../store/store.js';
 import { defaultServerUrl, login, register } from '../store/api.js';
-import { Empty, Segmented, Sheet, useConfirm, useToast } from '../components/ui.js';
+import { Empty, Segmented, Sheet, Switch, useConfirm, useToast } from '../components/ui.js';
 import { HabitSheet } from '../components/HabitSheet.js';
 import { requestPermission } from '../lib/notifications.js';
 import { scheduleLabel } from '../lib/format.js';
@@ -24,7 +24,9 @@ export function Settings({ editing, setEditing }: { editing: Habit | null; setEd
   const [tab, setTab] = useState<Tab>('habitos');
   return (
     <>
-      <h1 style={{ marginBottom: 12 }}>Ajustes</h1>
+      <div className="page-head">
+        <h1 className="title-lg">Ajustes</h1>
+      </div>
       <Segmented<Tab>
         value={tab}
         onChange={setTab}
@@ -104,7 +106,7 @@ function HabitsTab({ editing, setEditing }: { editing: Habit | null; setEditing:
             >
               <div className="name">
                 {h.name}
-                {h.nonNegotiable && <span className="chip danger tiny">innegociable</span>}
+                {h.nonNegotiable && <span className="chip bad tiny">innegociable</span>}
                 {h.retireRequestedAt && <span className="chip warn tiny">baja pedida</span>}
               </div>
               <div className="meta">
@@ -252,13 +254,12 @@ function ProfileTab() {
       <div className="section-label">App</div>
       <div className="row" style={{ marginBottom: 12 }}>
         <div style={{ flex: 1 }} className="small">
-          Tema claro
+          Tema oscuro
         </div>
-        <input
-          type="checkbox"
-          checked={p.theme === 'light'}
-          style={{ width: 20, height: 20 }}
-          onChange={(e) => update((d) => patchProfile(d, { theme: e.target.checked ? 'light' : 'dark' }))}
+        <Switch
+          label="Tema oscuro"
+          checked={p.theme === 'dark'}
+          onChange={(v) => update((d) => patchProfile(d, { theme: v ? 'dark' : 'light' }))}
         />
       </div>
       <button

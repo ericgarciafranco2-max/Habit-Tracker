@@ -14,10 +14,22 @@ export function plural(n: number, one: string, many: string): string {
 }
 
 export function verdictColor(v: string): string {
-  if (v === 'perfecto') return 'var(--accent)';
-  if (v === 'aprobado') return 'var(--warn)';
-  if (v === 'suspenso') return 'var(--danger)';
-  return 'var(--text-faint)';
+  if (v === 'perfecto') return 'var(--good)';
+  if (v === 'aprobado') return 'var(--warning)';
+  if (v === 'suspenso') return 'var(--critical)';
+  return 'var(--text-3)';
+}
+
+/** El veredicto, escrito como lo leeria una persona. */
+export function verdictLabel(v: string): string {
+  return (
+    {
+      perfecto: 'Dia perfecto',
+      aprobado: 'Dia aprobado',
+      suspenso: 'Dia suspenso',
+      pendiente: 'En curso',
+    }[v] ?? v
+  );
 }
 
 export function scheduleLabel(schedule: { type: string; days?: number[]; timesPerWeek?: number }): string {
@@ -40,4 +52,9 @@ export function scheduleLabel(schedule: { type: string; days?: number[]; timesPe
     default:
       return '';
   }
+}
+
+/** Primera letra en mayuscula, el resto tal cual (los meses van en minuscula). */
+export function sentenceCase(text: string): string {
+  return text ? text[0]!.toUpperCase() + text.slice(1) : text;
 }

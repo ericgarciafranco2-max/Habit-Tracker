@@ -8,18 +8,33 @@ import {
   monthlyRates,
   periodStats,
   startOfWeek,
+  trackingStart,
   weekSummary,
   yearHeatmap,
 } from '@habit/core';
 import { useStore } from '../store/store.js';
-import { Bar, BarChart, Empty, Heatmap, Ring, Sparkline } from '../components/ui.js';
-import { hm, pct } from '../lib/format.js';
+import { ColumnChart, Empty, Heatmap, LineChart, Meter, Ring, StackedBar } from '../components/ui.js';
+import { Icon } from '../components/Icon.js';
+import { hm, pct, plural } from '../lib/format.js';
+import { seriesColor, slotColor, useIsDark } from '../lib/palette.js';
+
+const CATEGORY_LABEL: Record<string, string> = {
+  salud: 'Salud',
+  mente: 'Mente',
+  estudio: 'Estudio',
+  disciplina: 'Disciplina',
+  social: 'Social',
+  finanzas: 'Finanzas',
+  otro: 'Otro',
+};
 
 export function Dashboard() {
   const { doc, today } = useStore();
+  const isDark = useIsDark();
   const [year, setYear] = useState(() => fromISODate(today).getFullYear());
 
   const level = levelFromXp(doc.profile.xp);
+  const start = trackingStart(doc);
   const heat = useMemo(() => yearHeatmap(doc, year, today), [doc, year, today]);
   const months = useMemo(() => monthlyRates(doc, year, today), [doc, year, today]);
   const yearStats = useMemo(
@@ -28,60 +43,75 @@ export function Dashboard() {
   );
 
   const weeks = useMemo(() => {
-    const out = [] as Array<{ label: string; rate: number; xp: number; study: number }>;
+    const out: Array<{ label: string; value: number; xp: number; study: number }> = [];
     for (let i = 11; i >= 0; i--) {
-      const start = startOfWeek(addDays(today, -7 * i));
-      const s = weekSummary(doc, start, today);
-      out.push({ label: start.slice(5), rate: s.rate, xp: s.xp, study: s.studyMinutes });
+      const weekStart = startOfWeek(addDays(today, -7 * i));
+      const s = weekSummary(doc, weekStart, today);
+      out.push({ label: weekStart.slice(8) + '/' + weekStart.slice(5, 7), value: s.rate, xp: s.xp, study: s.studyMinutes });
     }
     return out;
   }, [doc, today]);
 
-  const doneDays = heat.filter((h) => h.rate >= 1).length;
-  const zeroDays = heat.filter((h) => h.rate === 0).length;
-  const avg = heat.length ? heat.reduce((a, h) => a + h.rate, 0) / heat.length : 0;
+  // Reparto del esfuerzo por area: parte respecto al todo, en barra apilada.
+  const byCategory = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of yearStats) {
+      map.set(s.habit.category, (map.get(s.habit.category) ?? 0) + s.done + s.partial * 0.5);
+    }
+    return [...map.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([cat, value], i) => ({
+        label: CATEGORY_LABEL[cat] ?? cat,
+        value: Math.round(value),
+        color: slotColor(i, isDark),
+      }));
+  }, [yearStats, isDark]);
+
+  const tracked = heat.filter((h) => h.date >= start);
+  const doneDays = tracked.filter((h) => h.rate >= 1).length;
+  const zeroDays = tracked.filter((h) => h.rate === 0).length;
+  const avg = tracked.length ? tracked.reduce((a, h) => a + h.rate, 0) / tracked.length : 0;
   const bestStreak = Math.max(0, ...yearStats.map((s) => s.streak.best));
-  const currentStreaks = yearStats.filter((s) => s.streak.current > 0).length;
+  const liveStreaks = yearStats.filter((s) => s.streak.current > 0).length;
 
   return (
     <>
-      <div className="row" style={{ marginBottom: 12 }}>
-        <button className="btn ghost small" onClick={() => setYear(year - 1)}>
-          ‹
+      <div className="page-head row">
+        <div style={{ flex: 1 }}>
+          <h1 className="title-lg">Panel</h1>
+          <div className="sub">{year}</div>
+        </div>
+        <button className="btn ghost" onClick={() => setYear(year - 1)} aria-label="Año anterior">
+          <Icon name="back" size={19} />
         </button>
-        <h1 style={{ flex: 1, textAlign: 'center', fontSize: '1.05rem' }}>Panel {year}</h1>
-        <button className="btn ghost small" onClick={() => setYear(year + 1)}>
-          ›
+        <button className="btn ghost" onClick={() => setYear(year + 1)} aria-label="Año siguiente">
+          <Icon name="forward" size={19} />
         </button>
       </div>
 
-      <div className="card">
-        <div className="row" style={{ gap: 16 }}>
-          <Ring value={avg} sub="media anual" />
-          <div style={{ flex: 1 }}>
-            <div className="bold" style={{ fontSize: '1.1rem' }}>
-              Nivel {level.level} · {level.title}
+      <section className="card">
+        <div className="row" style={{ gap: 20 }}>
+          <Ring value={avg} size={104} color="var(--seq-5)" caption="Media del año" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="hero-num">{level.level}</div>
+            <div className="muted small" style={{ marginBottom: 12 }}>
+              {level.title} · {doc.profile.xp} XP acumulados
             </div>
-            <div className="tiny faint" style={{ marginBottom: 5 }}>
-              {doc.profile.xp} XP totales
-            </div>
-            <Bar value={level.progress} />
-            <div className="tiny faint" style={{ marginTop: 6 }}>
-              {level.xpForNext - level.xpInLevel} XP para el nivel {level.level + 1}
-            </div>
+            <Meter value={level.progress} right={`${level.xpInLevel}/${level.xpForNext}`} />
+            <div className="tiny faint">Faltan {level.xpForNext - level.xpInLevel} XP para el nivel {level.level + 1}</div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="grid grid-4">
+      <div className="grid grid-4" style={{ marginBottom: 14 }}>
         <div className="stat">
           <div className="k">Dias perfectos</div>
           <div className="v">{doneDays}</div>
-          <div className="s">de {heat.length}</div>
+          <div className="s">de {tracked.length}</div>
         </div>
         <div className="stat">
           <div className="k">Dias en cero</div>
-          <div className="v" style={{ color: zeroDays ? 'var(--danger)' : undefined }}>
+          <div className="v" style={{ color: zeroDays ? 'var(--critical)' : undefined }}>
             {zeroDays}
           </div>
           <div className="s">nada marcado</div>
@@ -93,103 +123,97 @@ export function Dashboard() {
         </div>
         <div className="stat">
           <div className="k">Rachas vivas</div>
-          <div className="v">{currentStreaks}</div>
+          <div className="v">{liveStreaks}</div>
           <div className="s">habitos</div>
         </div>
       </div>
 
       <div className="section-label">Mapa del año</div>
-      <div className="card">
-        <Heatmap data={heat} />
-        <div className="row tiny faint" style={{ marginTop: 8 }}>
-          <span>Menos</span>
-          <div className="row" style={{ gap: 2 }}>
-            {[0, 0.3, 0.6, 0.9, 1].map((r) => (
-              <i
-                key={r}
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 2,
-                  display: 'block',
-                  background:
-                    r === 0
-                      ? 'var(--surface-3)'
-                      : `color-mix(in srgb, var(--accent) ${r * 100}%, var(--surface-3))`,
-                }}
-              />
-            ))}
-          </div>
-          <span>Mas</span>
-        </div>
-      </div>
+      <section className="card">
+        <Heatmap data={heat.map((h) => ({ ...h, empty: h.date < start }))} />
+      </section>
 
       <div className="section-label">Por meses</div>
-      <div className="card">
-        <BarChart
-          values={months}
-          labels={MONTH_LONG.map((m) => m.slice(0, 1).toUpperCase())}
-          height={100}
+      <section className="card">
+        <ColumnChart
+          data={months.map((v, i) => ({
+            label: MONTH_LONG[i]!.slice(0, 3),
+            value: v,
+            caption: MONTH_LONG[i],
+          }))}
+          color="var(--seq-4)"
+          format={(v) => pct(v)}
+          height={120}
+          max={1}
         />
-      </div>
+      </section>
 
       <div className="section-label">Ultimas 12 semanas</div>
-      <div className="card">
-        <Sparkline values={weeks.map((w) => w.rate)} height={60} />
-        <div className="row tiny faint" style={{ marginTop: 6 }}>
-          <span style={{ flex: 1 }}>{weeks[0]?.label}</span>
-          <span>{weeks[weeks.length - 1]?.label}</span>
+      <section className="card">
+        <div className="card-head">
+          <h3>Cumplimiento semanal</h3>
+          <span className="tiny faint">% de lo obligatorio</span>
         </div>
+        <LineChart data={weeks} yMax={1} format={(v) => pct(v)} color="var(--series-1)" />
         <hr className="sep" />
         <div className="row small">
           <div style={{ flex: 1 }}>
             <div className="faint tiny">Media</div>
-            <div className="bold">{pct(weeks.reduce((a, w) => a + w.rate, 0) / (weeks.length || 1))}</div>
+            <div className="bold num">{pct(weeks.reduce((a, w) => a + w.value, 0) / (weeks.length || 1))}</div>
           </div>
           <div style={{ flex: 1 }}>
-            <div className="faint tiny">Estudio total</div>
-            <div className="bold">{hm(weeks.reduce((a, w) => a + w.study, 0))}</div>
+            <div className="faint tiny">Estudio</div>
+            <div className="bold num">{hm(weeks.reduce((a, w) => a + w.study, 0))}</div>
           </div>
           <div style={{ flex: 1 }}>
             <div className="faint tiny">XP</div>
-            <div className="bold">{weeks.reduce((a, w) => a + w.xp, 0)}</div>
+            <div className="bold num">{weeks.reduce((a, w) => a + w.xp, 0)}</div>
           </div>
         </div>
-      </div>
+      </section>
+
+      {byCategory.length > 1 && (
+        <>
+          <div className="section-label">En que se te va el esfuerzo</div>
+          <section className="card">
+            <StackedBar parts={byCategory} format={(v) => plural(v, 'dia', 'dias')} />
+            <p className="tiny faint" style={{ marginTop: 12, marginBottom: 0 }}>
+              Si una sola area se come la barra, mira si es la que dijiste que te importaba.
+            </p>
+          </section>
+        </>
+      )}
 
       <div className="section-label">Ranking de habitos</div>
-      <div className="card">
+      <section className="card">
         {yearStats.length ? (
-          yearStats.map((s, i) => (
-            <div key={s.habit.id} style={{ marginBottom: 11 }}>
-              <div className="row tiny" style={{ marginBottom: 3 }}>
-                <span className="faint mono" style={{ width: 18 }}>
-                  {i + 1}
-                </span>
-                <span style={{ flex: 1 }}>
+          yearStats.map((s) => (
+            <Meter
+              key={s.habit.id}
+              label={
+                <>
                   {s.habit.emoji} {s.habit.name}
-                </span>
-                {s.streak.current > 0 && <span className="faint">🔥 {s.streak.current}</span>}
-                <span className="mono bold" style={{ width: 40, textAlign: 'right' }}>
-                  {pct(s.rate)}
-                </span>
-              </div>
-              <Bar value={s.rate} color={s.habit.color} />
-            </div>
+                  {s.streak.current > 0 && <span className="faint"> · 🔥 {s.streak.current}</span>}
+                </>
+              }
+              value={s.rate}
+              right={pct(s.rate)}
+              color={seriesColor(s.habit.color, isDark)}
+            />
           ))
         ) : (
           <Empty text="Sin datos de este año" />
         )}
-      </div>
+      </section>
 
       <div className="section-label">Historial</div>
-      <div className="card">
+      <section className="card flush">
         {list(doc.ledger)
           .sort((a, b) => b.updatedAt - a.updatedAt)
           .slice(0, 25)
           .map((e) => (
-            <div className="list-item" key={e.id}>
-              <span style={{ width: 22 }}>
+            <div className="habit-row" key={e.id}>
+              <span className="emoji" style={{ background: 'var(--surface-2)' }}>
                 {e.kind === 'sancion'
                   ? '⚖️'
                   : e.kind === 'deuda-creada'
@@ -202,14 +226,16 @@ export function Dashboard() {
                           ? '👀'
                           : '•'}
               </span>
-              <div style={{ flex: 1 }}>
-                <div className="small">{e.text}</div>
-                <div className="tiny faint">{e.date}</div>
-              </div>
+              <span className="info">
+                <span className="name" style={{ fontWeight: 400, fontSize: 14.5 }}>
+                  {e.text}
+                </span>
+                <span className="meta">{e.date}</span>
+              </span>
             </div>
           ))}
         {!list(doc.ledger).length && <Empty text="Todavia no hay historial" />}
-      </div>
+      </section>
     </>
   );
 }

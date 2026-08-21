@@ -20,7 +20,7 @@ import {
   type Reward,
 } from '@habit/core';
 import { useStore } from '../store/store.js';
-import { Bar, Empty, Segmented, Sheet, useConfirm, useToast } from '../components/ui.js';
+import { Empty, Meter, Segmented, Sheet, Switch, useConfirm, useToast } from '../components/ui.js';
 import { hm, pct } from '../lib/format.js';
 
 type Tab = 'contrato' | 'consecuencias' | 'auditoria';
@@ -33,7 +33,10 @@ export function Pressure() {
   const [tab, setTab] = useState<Tab>('contrato');
   return (
     <>
-      <h1 style={{ marginBottom: 12 }}>Presion</h1>
+      <div className="page-head">
+        <h1 className="title-lg">Presion</h1>
+        <div className="sub">Donde fallar deja de ser gratis.</div>
+      </div>
       <Segmented<Tab>
         value={tab}
         onChange={setTab}
@@ -118,13 +121,12 @@ function ContractTab() {
             </div>
             {c.status === 'activo' && (
               <>
-                <div className="row tiny" style={{ marginBottom: 4 }}>
-                  <span style={{ flex: 1 }}>Semana en curso</span>
-                  <span className="mono bold" style={{ color: ok ? 'var(--accent)' : 'var(--danger)' }}>
-                    {pct(audit.rate)} / {c.weeklyThreshold}%
-                  </span>
-                </div>
-                <Bar value={audit.rate} color={ok ? 'var(--accent)' : 'var(--danger)'} />
+                <Meter
+                  label="Semana en curso"
+                  value={audit.rate}
+                  right={`${pct(audit.rate)} de ${c.weeklyThreshold}%`}
+                  color={ok ? 'var(--good)' : 'var(--critical)'}
+                />
               </>
             )}
             <div className="row wrap" style={{ marginTop: 10 }}>
@@ -360,7 +362,7 @@ function ConsequencesTab() {
       <div className="section-label">Penitencias</div>
       <div className="card">
         {penance && (
-          <div className="banner danger" style={{ marginBottom: 10 }}>
+          <div className="banner bad" style={{ marginBottom: 10 }}>
             <span className="icon">⚖️</span>
             <div style={{ flex: 1 }}>
               <b>Activa ahora</b>
@@ -472,13 +474,12 @@ function ConsequencesTab() {
               Prohibe editar dias mas alla de ayer y obliga a 72h de enfriamiento para retirar un habito.
             </div>
           </div>
-          <input
-            type="checkbox"
+          <Switch
+            label="Modo estricto"
             checked={doc.profile.strictMode}
-            style={{ width: 20, height: 20 }}
-            onChange={(e) => {
-              update((d) => patchProfile(d, { strictMode: e.target.checked }));
-              toast(e.target.checked ? 'Modo estricto activado.' : 'Modo estricto desactivado. Tu sabras.');
+            onChange={(v) => {
+              update((d) => patchProfile(d, { strictMode: v }));
+              toast(v ? 'Modo estricto activado.' : 'Modo estricto desactivado. Tu sabras.');
             }}
           />
         </div>
@@ -538,7 +539,7 @@ function AuditTab() {
         <div className="grid grid-4" style={{ marginBottom: 12 }}>
           <div className="stat">
             <div className="k">Cumplido</div>
-            <div className="v" style={{ color: audit.rate >= 0.85 ? 'var(--accent)' : 'var(--warn)' }}>
+            <div className="v" style={{ color: audit.rate >= 0.85 ? 'var(--accent)' : 'var(--warning)' }}>
               {pct(audit.rate)}
             </div>
           </div>
@@ -549,7 +550,7 @@ function AuditTab() {
           </div>
           <div className="stat">
             <div className="k">Fallos</div>
-            <div className="v" style={{ color: audit.misses ? 'var(--danger)' : undefined }}>
+            <div className="v" style={{ color: audit.misses ? 'var(--critical)' : undefined }}>
               {audit.misses}
             </div>
           </div>
@@ -584,7 +585,7 @@ function AuditTab() {
                 <div style={{ flex: 1 }} className="small">
                   {w.habit.name}
                 </div>
-                <span className="chip danger tiny">-{w.misses}</span>
+                <span className="chip bad tiny">-{w.misses}</span>
               </div>
             ))}
           </div>
@@ -621,7 +622,7 @@ function AuditTab() {
       <div className="card">
         <pre
           className="mono tiny"
-          style={{ whiteSpace: 'pre-wrap', margin: 0, color: 'var(--text-dim)' }}
+          style={{ whiteSpace: 'pre-wrap', margin: 0, color: 'var(--text-2)' }}
         >
           {report}
         </pre>

@@ -11,12 +11,10 @@ import {
   type ISODate,
   type Schedule,
 } from '@habit/core';
-import { Sheet, useToast } from './ui.js';
+import { Sheet, Switch, useToast } from './ui.js';
+import { PALETTE } from '../lib/palette.js';
 
-const COLORS = [
-  '#7dd3a0', '#8fb8f0', '#f0c987', '#c9a7f5', '#ef7d6a',
-  '#9fd8c8', '#f5a3c7', '#84c5e8', '#f4b942', '#cdb4a0',
-];
+const COLORS = PALETTE;
 const EMOJIS = [
   '⏰', '📅', '📚', '🎓', '🏋️', '🚶', '📖', '🧘', '📵', '🥗',
   '💧', '📝', '🌙', '❄️', '🚀', '🧹', '💪', '🏃', '🎯', '💰',
@@ -104,11 +102,11 @@ export function HabitSheet({
               key={c}
               onClick={() => set('color', c)}
               style={{
-                width: 27,
-                height: 27,
-                borderRadius: 8,
+                width: 30,
+                height: 30,
+                borderRadius: 9,
                 background: c,
-                border: h.color === c ? '2px solid var(--text)' : '1px solid var(--line)',
+                border: h.color === c ? '2.5px solid var(--text)' : '1px solid var(--separator)',
               }}
               aria-label={c}
             />
@@ -233,12 +231,7 @@ export function HabitSheet({
           <div className="bold small">Innegociable</div>
           <div className="tiny faint">Bloquea tus recompensas del dia si no lo cumples.</div>
         </div>
-        <input
-          type="checkbox"
-          checked={h.nonNegotiable}
-          style={{ width: 20, height: 20 }}
-          onChange={(e) => set('nonNegotiable', e.target.checked)}
-        />
+        <Switch label="Innegociable" checked={h.nonNegotiable} onChange={(v) => set('nonNegotiable', v)} />
       </div>
 
       <label className="field">
@@ -257,13 +250,10 @@ export function HabitSheet({
           <div className="bold small">Deuda si fallo</div>
           <div className="tiny faint">Cada fallo acumula una deuda que tendras que pagar de mas.</div>
         </div>
-        <input
-          type="checkbox"
+        <Switch
+          label="Deuda si fallo"
           checked={Boolean(h.debtRule)}
-          style={{ width: 20, height: 20 }}
-          onChange={(e) =>
-            set('debtRule', e.target.checked ? { amount: 15, unit: 'minutos' } : undefined)
-          }
+          onChange={(v) => set('debtRule', v ? { amount: 15, unit: 'minutos' } : undefined)}
         />
       </div>
       {h.debtRule && (

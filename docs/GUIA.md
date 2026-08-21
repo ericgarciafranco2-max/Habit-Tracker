@@ -169,6 +169,17 @@ pesa mas y si llevas racha, y baja el ritmo cuando fallas.
 No es el motor del sistema — el motor son las consecuencias — pero es el que
 hace que abrir la app apetezca.
 
+## 11. La pestaña de Metodos
+
+En **Metodos** tienes veinte tecnicas (regla de los dos minutos, apilar habitos,
+intenciones de implementacion, bloques de tiempo, Ivy Lee, Eisenhower, recuerdo
+activo, repaso espaciado, Feynman, ley de Parkinson, dispositivos de
+compromiso...), cada una con quien la propuso, cuanto cuesta montarla y —lo
+importante— **como se aplica dentro de esta app**, no en abstracto.
+
+Y una frase al dia de gente que construyo algo. No estan de adorno: aparecen en
+la pantalla de Hoy, que es donde se decide si hoy cumples o no.
+
 ---
 
 # Combinarlo con la universidad

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   canEditDate,
   counts,
@@ -8,24 +8,27 @@ import {
   isScheduled,
   list,
   monthDates,
-  trackingStart,
   MONTH_LONG,
   toggleHabit,
+  trackingStart,
   WEEKDAY_INITIAL,
   weekday,
   type Habit,
 } from '@habit/core';
 import { useStore } from '../store/store.js';
-import { Bar, BarChart, Empty, Sparkline, useToast } from '../components/ui.js';
+import { ColumnChart, Empty, LineChart, Meter, useToast } from '../components/ui.js';
+import { Icon } from '../components/Icon.js';
 import { pct } from '../lib/format.js';
+import { seriesColor, useIsDark } from '../lib/palette.js';
 
 /**
- * La rejilla mensual: la vista que hace que un tracker se sienta un tracker.
- * Filas = habitos, columnas = dias. Se puede marcar directamente aqui.
+ * La rejilla mensual: filas de habitos, columnas de dias. Es la vista que
+ * convierte "creo que voy bien" en una superficie que no admite discusion.
  */
 export function Month() {
   const { doc, today, update } = useStore();
   const toast = useToast();
+  const isDark = useIsDark();
   const [cursor, setCursor] = useState(() => {
     const d = fromISODate(today);
     return { year: d.getFullYear(), month: d.getMonth() };
@@ -37,8 +40,7 @@ export function Month() {
     [doc.habits],
   );
   const start = trackingStart(doc);
-  // Los dias anteriores a instalar la app no cuentan como fallos.
-  const from = (dates[0]! < start ? start : dates[0]!);
+  const from = dates[0]! < start ? start : dates[0]!;
   const to = dates[dates.length - 1]!;
 
   const stats = useMemo(
@@ -46,16 +48,33 @@ export function Month() {
     [doc, habits, from, to, today],
   );
 
-  const moodSeries = dates.filter((d) => d <= today && d >= start).map((d) => doc.days[d]?.mood ?? 0);
-  const sleepSeries = dates.filter((d) => d <= today && d >= start).map((d) => doc.days[d]?.sleepHours ?? 0);
+  const visible = dates.filter((d) => d <= today && d >= start);
+  const dailyRates = visible.map((d) => {
+    const total = habits.filter((h) => isScheduled(doc, h, d)).length;
+    const done = habits.filter((h) => isScheduled(doc, h, d) && counts(getEntry(doc, h.id, d))).length;
+    return { label: '', value: total ? done / total : 0, caption: d };
+  });
+  // Con 30 columnas no caben 30 etiquetas: una de cada cinco basta para orientarse.
+  dailyRates.forEach((d, i) => {
+    if (i === 0 || (i + 1) % 5 === 0) d.label = String(Number(visible[i]!.slice(8)));
+  });
 
-  const dailyRates = dates
-    .filter((d) => d <= today && d >= start)
-    .map((d) => {
-      const total = habits.filter((h) => isScheduled(doc, h, d)).length;
-      const done = habits.filter((h) => isScheduled(doc, h, d) && counts(getEntry(doc, h.id, d))).length;
-      return total ? done / total : 0;
-    });
+  const moodSeries = visible
+    .filter((d) => doc.days[d]?.mood != null)
+    .map((d) => ({ label: d.slice(5), value: doc.days[d]!.mood! }));
+  const sleepSeries = visible
+    .filter((d) => doc.days[d]?.sleepHours != null)
+    .map((d) => ({ label: d.slice(5), value: doc.days[d]!.sleepHours! }));
+
+  // Al abrir el mes en curso, la rejilla se coloca sola en el dia de hoy:
+  // si no, en un movil te recibe siempre el dia 1.
+  const gridRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const cell = el.querySelector<HTMLElement>('.cell.today');
+    if (cell) el.scrollLeft = Math.max(0, cell.offsetLeft - el.clientWidth * 0.6);
+  }, [cursor, habits.length]);
 
   const move = (delta: number) => {
     const m = cursor.month + delta;
@@ -73,57 +92,74 @@ export function Month() {
 
   const totalDone = stats.reduce((a, s) => a + s.done, 0);
   const totalScheduled = stats.reduce((a, s) => a + s.scheduled, 0);
+  const perfect = dailyRates.filter((r) => r.value >= 1).length;
+  const zero = dailyRates.filter((r) => r.value === 0).length;
 
   return (
     <>
-      <div className="row" style={{ marginBottom: 12 }}>
-        <button className="btn ghost small" onClick={() => move(-1)}>
-          ‹
+      <div className="page-head row">
+        <div style={{ flex: 1 }}>
+          <h1 className="title-lg" style={{ textTransform: 'capitalize' }}>
+            {MONTH_LONG[cursor.month]}
+          </h1>
+          <div className="sub">{cursor.year}</div>
+        </div>
+        <button className="btn ghost" onClick={() => move(-1)} aria-label="Mes anterior">
+          <Icon name="back" size={19} />
         </button>
-        <h1 style={{ flex: 1, textAlign: 'center', fontSize: '1.05rem', textTransform: 'capitalize' }}>
-          {MONTH_LONG[cursor.month]} {cursor.year}
-        </h1>
-        <button className="btn ghost small" onClick={() => move(1)}>
-          ›
+        <button className="btn ghost" onClick={() => move(1)} aria-label="Mes siguiente">
+          <Icon name="forward" size={19} />
         </button>
       </div>
 
-      <div className="card">
-        <div className="grid grid-4" style={{ marginBottom: 12 }}>
-          <div className="stat">
-            <div className="k">Cumplido</div>
-            <div className="v">{totalScheduled ? pct(totalDone / totalScheduled) : '—'}</div>
-            <div className="s">
-              {totalDone} de {totalScheduled}
-            </div>
-          </div>
-          <div className="stat">
-            <div className="k">Mejor racha</div>
-            <div className="v">{Math.max(0, ...stats.map((s) => s.streak.best))}</div>
-            <div className="s">dias seguidos</div>
-          </div>
-          <div className="stat">
-            <div className="k">Dias perfectos</div>
-            <div className="v">{dailyRates.filter((r) => r >= 1).length}</div>
-            <div className="s">de {dailyRates.length}</div>
-          </div>
-          <div className="stat">
-            <div className="k">Dias en cero</div>
-            <div className="v" style={{ color: 'var(--danger)' }}>
-              {dailyRates.filter((r) => r === 0).length}
-            </div>
-            <div className="s">sin nada marcado</div>
+      <div className="grid grid-4" style={{ marginBottom: 14 }}>
+        <div className="stat">
+          <div className="k">Cumplido</div>
+          <div className="v">{totalScheduled ? pct(totalDone / totalScheduled) : '—'}</div>
+          <div className="s">
+            {totalDone} de {totalScheduled}
           </div>
         </div>
-        <BarChart values={dailyRates} color="var(--accent)" height={70} />
-        <div className="tiny faint center" style={{ marginTop: 4 }}>
-          Progreso diario del mes
+        <div className="stat">
+          <div className="k">Dias perfectos</div>
+          <div className="v">{perfect}</div>
+          <div className="s">de {dailyRates.length}</div>
+        </div>
+        <div className="stat">
+          <div className="k">Dias en cero</div>
+          <div className="v" style={{ color: zero ? 'var(--critical)' : undefined }}>
+            {zero}
+          </div>
+          <div className="s">sin nada marcado</div>
+        </div>
+        <div className="stat">
+          <div className="k">Mejor racha</div>
+          <div className="v">{Math.max(0, ...stats.map((s) => s.streak.best))}</div>
+          <div className="s">dias seguidos</div>
         </div>
       </div>
 
-      {/* ------------------------- La rejilla ------------------------- */}
-      <div className="card flush" style={{ padding: 12 }}>
-        <div className="grid-wrap">
+      <section className="card">
+        <div className="card-head">
+          <h3>Progreso diario</h3>
+          <span className="tiny faint">% de habitos del dia</span>
+        </div>
+        {dailyRates.length ? (
+          <ColumnChart
+            data={dailyRates}
+            color="var(--seq-4)"
+            format={(v) => `${Math.round(v * 100)}%`}
+            highlightLast
+            max={1}
+          />
+        ) : (
+          <Empty text="Todavia no hay dias registrados este mes" />
+        )}
+      </section>
+
+      {/* --------------------------- La rejilla --------------------------- */}
+      <section className="card">
+        <div className="grid-wrap" ref={gridRef}>
           <table className="month">
             <thead>
               <tr>
@@ -137,7 +173,7 @@ export function Month() {
                     </th>
                   );
                 })}
-                <th className="day-h" style={{ width: 40 }}>
+                <th className="day-h" style={{ width: 42 }}>
                   %
                 </th>
               </tr>
@@ -148,7 +184,7 @@ export function Month() {
                 return (
                   <tr key={h.id}>
                     <td className="name-c" title={h.name}>
-                      <span style={{ marginRight: 5 }}>{h.emoji}</span>
+                      <span style={{ marginRight: 6 }}>{h.emoji}</span>
                       {h.name}
                     </td>
                     {dates.map((d) => {
@@ -173,14 +209,15 @@ export function Month() {
                             className={`cell ${cls} ${d === today ? 'today' : ''}`}
                             disabled={!scheduled || d > today}
                             title={`${h.name} — ${d}`}
+                            aria-label={`${h.name} ${d}`}
                             onClick={() => toggle(h, d)}
                           >
-                            {entry?.status === 'frozen' ? '❄' : entry?.status === 'partial' ? '◐' : ''}
+                            {entry?.status === 'partial' ? '◐' : ''}
                           </button>
                         </td>
                       );
                     })}
-                    <td className="mono tiny" style={{ paddingLeft: 6, color: 'var(--text-dim)' }}>
+                    <td className="tiny num" style={{ paddingLeft: 8, color: 'var(--text-2)' }}>
                       {pct(s.rate)}
                     </td>
                   </tr>
@@ -190,41 +227,59 @@ export function Month() {
           </table>
         </div>
         {!habits.length && <Empty text="No tienes habitos. Creal­os en Ajustes." />}
-      </div>
+        <div className="legend" style={{ marginTop: 14 }}>
+          <span className="item">
+            <i className="swatch" style={{ background: 'var(--good)' }} /> cumplido
+          </span>
+          <span className="item">
+            <i className="swatch" style={{ background: 'color-mix(in srgb, var(--warning) 78%, transparent)' }} /> minimo
+          </span>
+          <span className="item">
+            <i className="swatch" style={{ background: 'var(--neutral)' }} /> congelado
+          </span>
+          <span className="item">
+            <i className="swatch" style={{ background: 'color-mix(in srgb, var(--critical) 26%, var(--surface-2))' }} />{' '}
+            fallado
+          </span>
+        </div>
+      </section>
 
-      {/* -------------------------- Analisis -------------------------- */}
       <div className="section-label">Analisis del mes</div>
-      <div className="card">
-        {stats.map((s) => (
-          <div key={s.habit.id} style={{ marginBottom: 10 }}>
-            <div className="row tiny" style={{ marginBottom: 3 }}>
-              <span style={{ flex: 1 }}>
-                {s.habit.emoji} {s.habit.name}
-              </span>
-              <span className="mono faint">
-                {s.done + s.partial}/{s.scheduled}
-              </span>
-              <span className="mono bold" style={{ width: 40, textAlign: 'right' }}>
-                {pct(s.rate)}
-              </span>
-            </div>
-            <Bar value={s.rate} color={s.habit.color} />
-          </div>
-        ))}
-        {!stats.length && <Empty text="Sin datos todavia" />}
-      </div>
+      <section className="card">
+        {stats.length ? (
+          stats.map((s) => (
+            <Meter
+              key={s.habit.id}
+              label={`${s.habit.emoji} ${s.habit.name}`}
+              value={s.rate}
+              right={`${s.done + s.partial}/${s.scheduled} · ${pct(s.rate)}`}
+              color={seriesColor(s.habit.color, isDark)}
+            />
+          ))
+        ) : (
+          <Empty text="Sin datos todavia" />
+        )}
+      </section>
 
       <div className="section-label">Bienestar</div>
-      <div className="card">
-        <div className="row small muted" style={{ marginBottom: 4 }}>
-          <span style={{ flex: 1 }}>Animo (1-5)</span>
+      <section className="card">
+        <div className="card-head">
+          <h3>Animo</h3>
+          <span className="tiny faint">escala 1–5</span>
         </div>
-        <Sparkline values={moodSeries} color="var(--accent)" />
-        <div className="row small muted" style={{ margin: '10px 0 4px' }}>
-          <span style={{ flex: 1 }}>Horas de sueno</span>
+        <LineChart data={moodSeries} yMax={5} color="var(--series-5)" height={110} />
+      </section>
+      <section className="card">
+        <div className="card-head">
+          <h3>Horas de sueño</h3>
+          <span className="tiny faint">por noche</span>
         </div>
-        <Sparkline values={sleepSeries} color="var(--info)" />
-      </div>
+        <LineChart data={sleepSeries} yMax={10} color="var(--series-7)" height={110} format={(v) => `${v} h`} />
+      </section>
+      <p className="tiny faint" style={{ padding: '0 4px' }}>
+        Animo y sueño van en dos graficas separadas a proposito: meter dos escalas distintas en un solo eje
+        es la forma mas facil de leer una relacion que no existe.
+      </p>
     </>
   );
 }

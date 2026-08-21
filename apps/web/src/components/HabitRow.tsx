@@ -13,7 +13,8 @@ import {
   type Habit,
   type ISODate,
 } from '@habit/core';
-import { Sheet, useToast } from './ui.js';
+import { Meter, Sheet, useToast } from './ui.js';
+import { Icon } from './Icon.js';
 import { scheduleLabel } from '../lib/format.js';
 
 interface Props {
@@ -23,9 +24,11 @@ interface Props {
   today: ISODate;
   update: (fn: (d: Doc) => Doc) => void;
   onEdit?: (habit: Habit) => void;
+  /** Color ya traducido al tema en curso. */
+  color: string;
 }
 
-export function HabitRow({ doc, habit, date, today, update, onEdit }: Props) {
+export function HabitRow({ doc, habit, date, today, update, onEdit, color }: Props) {
   const [open, setOpen] = useState(false);
   const toast = useToast();
   const entry = getEntry(doc, habit.id, date);
@@ -48,37 +51,31 @@ export function HabitRow({ doc, habit, date, today, update, onEdit }: Props) {
     update((d) => logHabit(d, habit.id, date, Math.max(0, next)));
   };
 
-  const cls = entry?.status === 'frozen'
-    ? 'frozen'
-    : entry?.status === 'partial'
-      ? 'partial'
-      : done
-        ? 'on'
-        : entry?.status === 'missed' && value > 0
-          ? 'fail'
-          : '';
-
-  const mark = entry?.status === 'frozen' ? '❄' : entry?.status === 'partial' ? '◐' : done ? '✓' : '';
+  const cls =
+    entry?.status === 'frozen'
+      ? 'frozen'
+      : entry?.status === 'partial'
+        ? 'partial'
+        : done
+          ? 'on'
+          : entry?.status === 'missed' && value > 0
+            ? 'fail'
+            : '';
 
   const wp = habit.schedule.type === 'timesPerWeek' ? weekProgress(doc, habit, date) : null;
 
   return (
     <>
       <div className={`habit-row ${done ? 'done' : ''}`}>
-        <div className="emoji" style={{ background: `color-mix(in srgb, ${habit.color} 22%, transparent)` }}>
+        <span className="emoji" style={{ background: `color-mix(in srgb, ${color} 16%, transparent)` }}>
           {habit.emoji}
-        </div>
-        <button
-          className="info"
-          onClick={() => setOpen(true)}
-          style={{ background: 'none', border: 0, textAlign: 'left', padding: 0 }}
-        >
-          <div className="name">
-            <span className="dot" style={{ background: habit.color }} />
+        </span>
+        <button className="info" onClick={() => setOpen(true)}>
+          <span className="name">
             {habit.name}
-            {habit.nonNegotiable && <span className="chip danger tiny">innegociable</span>}
-          </div>
-          <div className="meta">
+            {habit.nonNegotiable && <span className="chip tiny bad">innegociable</span>}
+          </span>
+          <span className="meta">
             {habit.kind === 'quit' ? (
               <span>evitar</span>
             ) : habit.measure === 'check' ? (
@@ -94,27 +91,38 @@ export function HabitRow({ doc, habit, date, today, update, onEdit }: Props) {
                 semana {wp.done}/{wp.quota}
               </span>
             )}
-            {!required && <span className="faint">opcional hoy</span>}
-          </div>
+            {!required && <span>opcional</span>}
+          </span>
         </button>
 
         {habit.measure === 'check' || habit.kind === 'quit' ? (
           <button
             className={`check ${cls}`}
             aria-label={`Marcar ${habit.name}`}
+            aria-pressed={done}
             onClick={() => {
               if (!guard()) return;
               update((d) => toggleHabit(d, habit.id, date));
             }}
           >
-            {habit.kind === 'quit' && !done ? '✕' : mark}
+            {entry?.status === 'frozen' ? (
+              <Icon name="snow" size={14} />
+            ) : entry?.status === 'partial' ? (
+              '◐'
+            ) : done ? (
+              <Icon name="check" size={15} stroke={2.6} />
+            ) : habit.kind === 'quit' && entry?.status === 'missed' ? (
+              <Icon name="close" size={13} stroke={2.4} />
+            ) : (
+              ''
+            )}
           </button>
         ) : (
           <div className="stepper">
             <button onClick={() => setValue(value - stepOf(habit))} aria-label="Restar">
               −
             </button>
-            <div className={`value ${done ? 'bold' : 'faint'}`}>{value}</div>
+            <span className={`value ${done ? '' : 'faint'}`}>{value}</span>
             <button onClick={() => setValue(value + stepOf(habit))} aria-label="Sumar">
               +
             </button>
@@ -123,16 +131,16 @@ export function HabitRow({ doc, habit, date, today, update, onEdit }: Props) {
       </div>
 
       {open && (
-        <Sheet title={`${habit.emoji} ${habit.name}`} onClose={() => setOpen(false)}>
-          <div className="grid grid-3" style={{ marginBottom: 12 }}>
+        <Sheet title={`${habit.emoji}  ${habit.name}`} onClose={() => setOpen(false)}>
+          <div className="grid grid-3" style={{ marginBottom: 18 }}>
             <div className="stat">
               <div className="k">Racha</div>
-              <div className="v">🔥 {s.current}</div>
+              <div className="v">{s.current}</div>
               <div className="s">record {s.best}</div>
             </div>
             <div className="stat">
-              <div className="k">Fallos 7d</div>
-              <div className="v" style={{ color: s.recentMisses >= 3 ? 'var(--danger)' : undefined }}>
+              <div className="k">Fallos 7 dias</div>
+              <div className="v" style={{ color: s.recentMisses >= 3 ? 'var(--critical)' : undefined }}>
                 {s.recentMisses}
               </div>
               <div className="s">3 = sancion</div>
@@ -144,16 +152,24 @@ export function HabitRow({ doc, habit, date, today, update, onEdit }: Props) {
             </div>
           </div>
 
+          {habit.measure !== 'check' && (
+            <div style={{ marginBottom: 18 }}>
+              <Meter
+                label="Progreso de hoy"
+                value={habit.target ? value / habit.target : 0}
+                right={`${value} / ${habit.target} ${habit.unit ?? ''}`}
+                color={color}
+              />
+            </div>
+          )}
+
           {habit.notes && <p className="muted small">{habit.notes}</p>}
 
-          <div className="small muted stack" style={{ marginBottom: 14 }}>
+          <div className="small muted stack" style={{ marginBottom: 18, gap: 4 }}>
             <div>
-              <b>Objetivo:</b> {habit.target} {habit.unit ?? (habit.measure === 'check' ? '' : '')} ·{' '}
-              <b>Minimo valido:</b> {habit.minimum} {habit.unit ?? ''}
-            </div>
-            <div>
-              <b>Cuando:</b> {scheduleLabel(habit.schedule)}
-              {habit.windowStart && ` · ${habit.windowStart}-${habit.windowEnd}`}
+              <b>Minimo valido:</b> {habit.minimum} {habit.unit ?? ''} · <b>Cuando:</b>{' '}
+              {scheduleLabel(habit.schedule)}
+              {habit.windowStart && ` (${habit.windowStart}–${habit.windowEnd})`}
             </div>
             {habit.debtRule && (
               <div>
@@ -165,12 +181,7 @@ export function HabitRow({ doc, habit, date, today, update, onEdit }: Props) {
           {habit.measure !== 'check' && (
             <label className="field">
               <span>Registro de hoy ({habit.unit ?? 'unidades'})</span>
-              <input
-                type="number"
-                value={value}
-                min={0}
-                onChange={(e) => setValue(Number(e.target.value))}
-              />
+              <input type="number" value={value} min={0} onChange={(e) => setValue(Number(e.target.value))} />
             </label>
           )}
 
@@ -188,7 +199,7 @@ export function HabitRow({ doc, habit, date, today, update, onEdit }: Props) {
             />
           </label>
 
-          <div className="row wrap" style={{ marginTop: 8 }}>
+          <div className="row wrap" style={{ marginTop: 10, gap: 10 }}>
             <button
               className="btn small"
               disabled={doc.profile.freezeTokens <= 0 || entry?.status === 'frozen'}
@@ -198,7 +209,7 @@ export function HabitRow({ doc, habit, date, today, update, onEdit }: Props) {
                 setOpen(false);
               }}
             >
-              ❄ Congelar ({doc.profile.freezeTokens})
+              Congelar ({doc.profile.freezeTokens})
             </button>
             {onEdit && (
               <button
@@ -212,7 +223,7 @@ export function HabitRow({ doc, habit, date, today, update, onEdit }: Props) {
               </button>
             )}
           </div>
-          <p className="tiny faint" style={{ marginTop: 10 }}>
+          <p className="tiny faint" style={{ marginTop: 12 }}>
             Congelar salva la racha sin mentir: queda registrado que ese dia no lo hiciste. Solo 2 al mes.
           </p>
         </Sheet>

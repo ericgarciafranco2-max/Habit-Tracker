@@ -75,7 +75,7 @@ export function Onboarding() {
   };
 
   return (
-    <div className="app-main" style={{ maxWidth: 560, paddingBottom: 40 }}>
+    <div className="app-main" style={{ maxWidth: 560, paddingBottom: 48, paddingTop: 28 }}>
       <div className="row" style={{ marginBottom: 18, gap: 4 }}>
         {[0, 1, 2, 3].map((i) => (
           <div
@@ -85,6 +85,7 @@ export function Onboarding() {
               height: 3,
               borderRadius: 2,
               background: i <= step ? 'var(--accent)' : 'var(--surface-3)',
+              transition: 'background 0.3s ease',
             }}
           />
         ))}
@@ -92,7 +93,7 @@ export function Onboarding() {
 
       {step === 0 && (
         <>
-          <h1 style={{ marginBottom: 8 }}>Esto no es otra app de habitos</h1>
+          <h1 className="title-lg" style={{ marginBottom: 10 }}>Esto no es otra app de habitos</h1>
           <p className="muted">
             Es un sistema con consecuencias. Marcar casillas no cambia nada; lo que cambia algo es que
             fallar cueste y cumplir desbloquee. En dos minutos lo dejamos montado.
@@ -116,18 +117,18 @@ export function Onboarding() {
 
       {step === 1 && (
         <>
-          <h1 style={{ marginBottom: 8 }}>Elige tus habitos</h1>
+          <h1 className="title-lg" style={{ marginBottom: 10 }}>Elige tus habitos</h1>
           <p className="muted small">
             Menos es mas. Con 6-10 vas sobrado; todos se pueden editar o quitar despues.
           </p>
-          <div className="card flush" style={{ marginTop: 12 }}>
+          <div className="card flush" style={{ marginTop: 16 }}>
             {HABIT_CATALOG.map((tpl) => {
               const on = keys.includes(tpl.key);
               return (
                 <div className="habit-row" key={tpl.key}>
-                  <div className="emoji" style={{ background: `color-mix(in srgb, ${tpl.color} 22%, transparent)` }}>
+                  <span className="emoji" style={{ background: `color-mix(in srgb, ${tpl.color} 16%, transparent)` }}>
                     {tpl.emoji}
-                  </div>
+                  </span>
                   <div className="info">
                     <div className="name">{tpl.name}</div>
                     <div className="meta">
@@ -154,7 +155,7 @@ export function Onboarding() {
 
       {step === 2 && (
         <>
-          <h1 style={{ marginBottom: 8 }}>¿Cuales son innegociables?</h1>
+          <h1 className="title-lg" style={{ marginBottom: 10 }}>¿Cuales son innegociables?</h1>
           <p className="muted small">
             Los innegociables bloquean tus recompensas del dia si no los cumples. Elige pocos: dos o
             tres. Si todo es innegociable, nada lo es.
@@ -180,7 +181,7 @@ export function Onboarding() {
 
       {step === 3 && (
         <>
-          <h1 style={{ marginBottom: 8 }}>Consecuencias y recompensas</h1>
+          <h1 className="title-lg" style={{ marginBottom: 10 }}>Consecuencias y recompensas</h1>
           <p className="muted small">
             Escribelas ahora, con la cabeza fria. La app las sacara cuando falles tres veces, que es
             justo cuando no querras escribirlas.

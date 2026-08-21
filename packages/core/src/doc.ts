@@ -21,7 +21,7 @@ export function defaultProfile(now = Date.now()): Profile {
     pomodoroMinutes: 50,
     breakMinutes: 10,
     onboarded: false,
-    theme: 'dark',
+    theme: 'light',
     createdAt: now,
   };
 }

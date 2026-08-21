@@ -105,13 +105,15 @@ export function habitStats(
   to: ISODate,
   upTo: ISODate = to,
 ): HabitPeriodStats {
+  // Los dias anteriores a que existiera el sistema no son fallos tuyos.
+  const begin = maxDate(from, trackingStart(doc));
   let scheduled = 0;
   let done = 0;
   let partial = 0;
   let missed = 0;
   let frozen = 0;
   let total = 0;
-  for (const date of rangeDates(from, to)) {
+  for (const date of rangeDates(begin, to)) {
     if (date > upTo) break;
     if (!isScheduled(doc, habit, date)) continue;
     scheduled++;
@@ -282,9 +284,8 @@ export function weekSummary(doc: Doc, anyDateInWeek: ISODate, upTo: ISODate): We
 export function yearHeatmap(doc: Doc, year: number, upTo: ISODate): Array<{ date: ISODate; rate: number }> {
   const from = `${year}-01-01`;
   const to = `${year}-12-31`;
-  const start = trackingStart(doc);
   return rangeDates(from, to)
-    .filter((d) => d <= upTo && d >= start)
+    .filter((d) => d <= upTo)
     .map((date) => ({ date, rate: dayScore(doc, date).rate }));
 }
 

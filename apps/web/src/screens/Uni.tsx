@@ -23,12 +23,13 @@ import {
   type Task,
 } from '@habit/core';
 import { useStore } from '../store/store.js';
-import { Bar, Empty, Segmented, Sheet, useConfirm, useToast } from '../components/ui.js';
+import { Empty, Meter, Segmented, Sheet, StackedBar, useConfirm, useToast } from '../components/ui.js';
+import { PALETTE, seriesColor, useIsDark } from '../lib/palette.js';
 import { hm } from '../lib/format.js';
 
 type Tab = 'plan' | 'horario' | 'asignaturas' | 'examenes';
 
-const COLORS = ['#7dd3a0', '#8fb8f0', '#f0c987', '#c9a7f5', '#ef7d6a', '#9fd8c8', '#f5a3c7', '#84c5e8'];
+const COLORS = PALETTE;
 
 export function Uni() {
   const { doc, update } = useStore();
@@ -39,7 +40,10 @@ export function Uni() {
 
   return (
     <>
-      <h1 style={{ marginBottom: 12 }}>Universidad</h1>
+      <div className="page-head">
+        <h1 className="title-lg">Universidad</h1>
+        <div className="sub">El horario manda; el plan lo hace la app.</div>
+      </div>
       <Segmented<Tab>
         value={tab}
         onChange={setTab}
@@ -52,7 +56,7 @@ export function Uni() {
       />
 
       {!hasData && (
-        <div className="banner info">
+        <div className="banner">
           <span className="icon">🎓</span>
           <div style={{ flex: 1 }}>
             <b>Sin asignaturas todavia</b>
@@ -86,10 +90,33 @@ export function Uni() {
 
 function PlanTab() {
   const { doc, today } = useStore();
+  const isDark = useIsDark();
   const [days, setDays] = useState(7);
   const plan = useMemo(() => buildStudyPlan(doc, today, { horizonDays: days }), [doc, today, days]);
   const countdowns = useMemo(() => examCountdowns(doc, today), [doc, today]);
   const load = useMemo(() => weeklyLoad(doc, startOfWeek(today)), [doc, today]);
+
+  // Reparto real del estudio: parte respecto al todo, en barra apilada.
+  const studyBySubject = useMemo(() => {
+    const since = addDays(today, -30);
+    const map = new Map<string, number>();
+    for (const session of list(doc.sessions)) {
+      if (session.date < since || session.date > today) continue;
+      const key = session.subjectId ?? '';
+      map.set(key, (map.get(key) ?? 0) + session.minutes);
+    }
+    const rows = [...map.entries()]
+      .map(([id, minutes]) => ({
+        label: (id && doc.subjects[id]?.name) || 'Sin asignatura',
+        value: minutes,
+        color: seriesColor(doc.subjects[id]?.color ?? '#b58400', isDark),
+      }))
+      .sort((a, b) => b.value - a.value);
+    // Mas de cinco tramos deja de leerse: el resto se agrupa.
+    if (rows.length <= 5) return rows;
+    const rest = rows.slice(5).reduce((a, r) => a + r.value, 0);
+    return [...rows.slice(0, 5), { label: 'Resto', value: rest, color: 'var(--text-3)' }];
+  }, [doc, today, isDark]);
 
   const byDate = useMemo(() => {
     const map = new Map<string, typeof plan>();
@@ -113,14 +140,18 @@ function PlanTab() {
               <div
                 key={c.exam.id}
                 className="card"
-                style={{ minWidth: 168, marginBottom: 0, borderLeft: `3px solid ${c.subject?.color ?? 'var(--accent)'}` }}
+                style={{
+                  minWidth: 176,
+                  marginBottom: 0,
+                  borderLeft: `3px solid ${seriesColor(c.subject?.color ?? '#0b6bcb', isDark)}`,
+                }}
               >
                 <div className="tiny faint">{c.subject?.name}</div>
                 <div className="bold" style={{ margin: '2px 0' }}>
                   {c.exam.title}
                 </div>
                 <div
-                  style={{ fontSize: '1.6rem', fontWeight: 700, color: c.daysLeft <= 3 ? 'var(--danger)' : undefined }}
+                  style={{ fontSize: '1.6rem', fontWeight: 700, color: c.daysLeft <= 3 ? 'var(--critical)' : undefined }}
                 >
                   {c.daysLeft}
                   <span className="tiny faint"> dias</span>
@@ -128,7 +159,7 @@ function PlanTab() {
                 <div className="tiny faint" style={{ marginBottom: 4 }}>
                   {hm(c.studiedMinutes)} de {hm(c.neededMinutes)}
                 </div>
-                <Bar value={c.readiness} color={c.readiness < 0.5 ? 'var(--warn)' : 'var(--accent)'} />
+                <Meter value={c.readiness} color={c.readiness < 0.5 ? 'var(--warning)' : 'var(--good)'} />
               </div>
             ))}
           </div>
@@ -153,8 +184,14 @@ function PlanTab() {
                   }}
                   title={`Clase ${hm(l.classMinutes)} · Estudio ${hm(l.studyMinutes)}`}
                 >
-                  <div style={{ height: `${(l.classMinutes / (total || 1)) * 100}%`, background: 'var(--info)' }} />
-                  <div style={{ height: `${(l.studyMinutes / (total || 1)) * 100}%`, background: 'var(--accent)' }} />
+                  <div style={{ height: `${(l.classMinutes / (total || 1)) * 100}%`, background: 'var(--series-1)' }} />
+                  <div
+                    style={{
+                      height: `${(l.studyMinutes / (total || 1)) * 100}%`,
+                      background: 'var(--series-3)',
+                      marginBottom: 2,
+                    }}
+                  />
                 </div>
                 <div className="tiny faint">{WEEKDAY_SHORT[new Date(l.date).getDay()]}</div>
               </div>
@@ -163,13 +200,26 @@ function PlanTab() {
         </div>
         <div className="row tiny faint" style={{ marginTop: 6, justifyContent: 'center', gap: 14 }}>
           <span>
-            <i style={{ display: 'inline-block', width: 8, height: 8, background: 'var(--info)', borderRadius: 2 }} /> clase
+            <i style={{ display: 'inline-block', width: 9, height: 9, background: 'var(--series-1)', borderRadius: 3 }} /> clase
           </span>
           <span>
-            <i style={{ display: 'inline-block', width: 8, height: 8, background: 'var(--accent)', borderRadius: 2 }} /> estudio
+            <i style={{ display: 'inline-block', width: 9, height: 9, background: 'var(--series-3)', borderRadius: 3 }} /> estudio
           </span>
         </div>
       </div>
+
+      {studyBySubject.length > 0 && (
+        <>
+          <div className="section-label">Donde han ido tus horas (30 dias)</div>
+          <div className="card">
+            <StackedBar parts={studyBySubject} format={(v) => hm(v)} />
+            <p className="tiny faint" style={{ marginTop: 12, marginBottom: 0 }}>
+              Compara esto con el peso de cada examen. Si la asignatura que mas pesa es la barra mas
+              fina, ya sabes que arreglar esta semana.
+            </p>
+          </div>
+        </>
+      )}
 
       <div className="row" style={{ margin: '18px 0 8px' }}>
         <div className="section-label" style={{ margin: 0, flex: 1 }}>
@@ -197,7 +247,7 @@ function PlanTab() {
               {blocks.map((b, i) => (
                 <div className="slot" key={i}>
                   <div className="time">{b.start}</div>
-                  <div className="block" style={{ borderLeftColor: b.color }}>
+                  <div className="block" style={{ borderLeftColor: seriesColor(b.color, isDark) }}>
                     <div className="t">{b.title}</div>
                     <div className="m">
                       {b.subjectName} · {b.start}-{b.end} · {b.kind}
@@ -367,6 +417,7 @@ function TimetableTab() {
 
 function SubjectsTab() {
   const { doc, update } = useStore();
+  const isDark = useIsDark();
   const [editing, setEditing] = useState<Subject | null>(null);
   const { confirm, node } = useConfirm();
   const subjects = list(doc.subjects).filter((s) => !s.archived);
@@ -389,7 +440,7 @@ function SubjectsTab() {
         + Nueva asignatura
       </button>
       {subjects.map((s) => (
-        <div className="card" key={s.id} style={{ borderLeft: `3px solid ${s.color}` }}>
+        <div className="card" key={s.id} style={{ borderLeft: `3px solid ${seriesColor(s.color, isDark)}` }}>
           <div className="card-head">
             <h3>{s.name}</h3>
             <span className="chip tiny">{s.credits} ECTS</span>
@@ -643,7 +694,7 @@ function ExamsTab() {
                   <div className="small bold" style={{ textDecoration: t.done ? 'line-through' : undefined }}>
                     {t.title || 'Sin titulo'}
                   </div>
-                  <div className="tiny" style={{ color: late ? 'var(--danger)' : 'var(--text-faint)' }}>
+                  <div className="tiny" style={{ color: late ? 'var(--critical)' : 'var(--text-3)' }}>
                     {s?.name ?? 'General'} · {t.due ?? 'sin fecha'} · {t.estimatedHours}h
                     {late && ' · FUERA DE PLAZO'}
                   </div>
