@@ -1,0 +1,24 @@
+{
+  "name": "habit-tracker-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Envoltorio de escritorio (Windows/macOS/Linux) para el Habit Tracker",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.habittracker.disciplina",
+    "productName": "Habit Tracker",
+    "files": ["main.cjs", "../web/dist/**/*"],
+    "directories": { "output": "release" },
+    "win": { "target": "nsis" },
+    "mac": { "target": "dmg" },
+    "linux": { "target": "AppImage" }
+  }
+}

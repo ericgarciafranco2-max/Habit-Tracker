@@ -1,0 +1,27 @@
+{
+  "name": "habit-tracker-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Habit Tracker multiplataforma (PC + movil) con sistema de presion y modulo universitario",
+  "workspaces": [
+    "packages/core",
+    "apps/web",
+    "apps/server"
+  ],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build:core": "npm run build -w @habit/core",
+    "dev": "npm run build:core && concurrently -n server,web -c blue,green \"npm run dev -w @habit/server\" \"npm run dev -w @habit/web\"",
+    "dev:web": "npm run dev -w @habit/web",
+    "dev:server": "npm run build:core && npm run dev -w @habit/server",
+    "build": "npm run build:core && npm run build -w @habit/web",
+    "start": "npm run build && npm run start -w @habit/server",
+    "test": "npm run test -w @habit/core",
+    "typecheck": "npm run typecheck -w @habit/core && npm run typecheck -w @habit/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  }
+}
