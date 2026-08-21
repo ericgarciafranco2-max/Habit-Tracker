@@ -12,7 +12,14 @@ import {
   type Habit,
 } from '@habit/core';
 import { useStore } from '../store/store.js';
-import { defaultServerUrl, login, register } from '../store/api.js';
+import {
+  defaultServerUrl,
+  exportGoogle,
+  login,
+  pingGoogle,
+  register,
+  type BackendKind,
+} from '../store/api.js';
 import { Empty, Segmented, Sheet, Switch, useConfirm, useToast } from '../components/ui.js';
 import { HabitSheet } from '../components/HabitSheet.js';
 import { requestPermission } from '../lib/notifications.js';
@@ -284,19 +291,44 @@ function ProfileTab() {
 function SyncTab() {
   const { config, setConfig, sync, syncError, lastSync, syncNow } = useStore();
   const toast = useToast();
-  const [url, setUrl] = useState(config?.serverUrl ?? defaultServerUrl());
+  const [kind, setKind] = useState<BackendKind>(config?.kind ?? 'google');
+  // Con Google la URL la da Apps Script, asi que no hay nada sensato que
+  // proponer; con servidor propio, el origen actual suele ser el bueno.
+  const [url, setUrl] = useState(
+    config?.serverUrl ?? ((config?.kind ?? 'google') === 'google' ? '' : defaultServerUrl()),
+  );
   const [email, setEmail] = useState(config?.email ?? '');
   const [password, setPassword] = useState('');
+  const [clave, setClave] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const run = async (mode: 'login' | 'register') => {
+  const conectarPropio = async (mode: 'login' | 'register') => {
     setBusy(true);
     try {
       const fn = mode === 'login' ? login : register;
       const res = await fn(url, email, password);
-      setConfig({ serverUrl: url, token: res.token, email: res.email });
+      setConfig({ kind: 'propio', serverUrl: url, token: res.token, email: res.email });
       setPassword('');
       toast('Conectado. Tus datos ya viajan entre dispositivos.');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'No se ha podido conectar');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const conectarGoogle = async () => {
+    setBusy(true);
+    try {
+      const res = await pingGoogle(url, clave.trim());
+      setConfig({
+        kind: 'google',
+        serverUrl: url.trim(),
+        token: clave.trim(),
+        email: res.hoja ?? 'Google Sheets',
+      });
+      setClave('');
+      toast('Conectado a tu hoja de calculo.');
     } catch (err) {
       toast(err instanceof Error ? err.message : 'No se ha podido conectar');
     } finally {
@@ -307,31 +339,49 @@ function SyncTab() {
   if (config) {
     return (
       <div className="card">
-        <div className="row" style={{ marginBottom: 10 }}>
+        <div className="row" style={{ marginBottom: 12 }}>
           <span className={`sync-dot ${sync}`} />
-          <div style={{ flex: 1 }}>
-            <div className="bold small">{config.email}</div>
-            <div className="tiny faint">
-              {config.serverUrl} ·{' '}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="bold small">
+              {config.kind === 'google' ? `Hoja de Google · ${config.email}` : config.email}
+            </div>
+            <div className="tiny faint" style={{ wordBreak: 'break-all' }}>
               {sync === 'error'
                 ? syncError
                 : lastSync
-                  ? `ultima sync ${new Date(lastSync).toLocaleTimeString()}`
-                  : 'sin sincronizar aun'}
+                  ? `Ultima sincronizacion a las ${new Date(lastSync).toLocaleTimeString()}`
+                  : 'Sin sincronizar aun'}
             </div>
           </div>
         </div>
-        <div className="row" style={{ gap: 8 }}>
+        <div className="row wrap" style={{ gap: 8 }}>
           <button className="btn primary" style={{ flex: 1 }} onClick={() => void syncNow()}>
             Sincronizar ahora
           </button>
+          {config.kind === 'google' && (
+            <button
+              className="btn"
+              onClick={async () => {
+                try {
+                  await exportGoogle(config);
+                  toast('Pestañas de la hoja actualizadas.');
+                } catch (err) {
+                  toast(err instanceof Error ? err.message : 'No se ha podido exportar');
+                }
+              }}
+            >
+              Actualizar hoja
+            </button>
+          )}
           <button className="btn danger" onClick={() => setConfig(null)}>
             Desconectar
           </button>
         </div>
-        <p className="tiny faint" style={{ marginTop: 10 }}>
-          Funciona sin conexion: se guarda todo en el dispositivo y se sube cuando vuelve la red. Si
-          marcas algo en el movil y otra cosa en el PC, se quedan las dos.
+        <p className="tiny faint" style={{ marginTop: 12 }}>
+          Funciona sin conexion: todo se guarda en el dispositivo y sube cuando vuelve la red. Si marcas
+          una cosa en el movil y otra en el PC, se quedan las dos.
+          {config.kind === 'google' &&
+            ' Las pestañas legibles de la hoja se refrescan solas como mucho una vez por hora, o cuando pulses "Actualizar hoja".'}
         </p>
       </div>
     );
@@ -339,38 +389,107 @@ function SyncTab() {
 
   return (
     <div className="card">
-      <p className="muted small">
-        Levanta el servidor en tu PC (<code>npm start</code>) y usa la direccion de red que imprime.
-        Tus datos no salen de tus maquinas.
-      </p>
-      <label className="field">
-        <span>Servidor</span>
-        <input type="text" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://192.168.1.40:4321" />
-      </label>
-      <label className="field">
-        <span>Email</span>
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
-      </label>
-      <label className="field">
-        <span>Contrasena</span>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="current-password"
-        />
-      </label>
-      <div className="row" style={{ gap: 8 }}>
-        <button className="btn primary" style={{ flex: 1 }} disabled={busy || !email || !password} onClick={() => run('login')}>
-          Entrar
-        </button>
-        <button className="btn" style={{ flex: 1 }} disabled={busy || !email || password.length < 6} onClick={() => run('register')}>
-          Crear cuenta
-        </button>
-      </div>
+      <Segmented<BackendKind>
+        value={kind}
+        onChange={(k) => {
+          setKind(k);
+          setUrl(k === 'google' ? '' : defaultServerUrl());
+        }}
+        options={[
+          { value: 'google', label: 'Hoja de Google' },
+          { value: 'propio', label: 'Servidor propio' },
+        ]}
+      />
+
+      {kind === 'google' ? (
+        <>
+          <p className="muted small">
+            Sin servidores encendidos y gratis: una hoja de calculo tuya con un script hace de punto de
+            sincronizacion, y ademas te deja los datos en pestañas que puedes mirar. Los pasos estan en{' '}
+            <code>docs/GOOGLE.md</code>.
+          </p>
+          <label className="field">
+            <span>URL de la aplicacion web</span>
+            <input
+              type="text"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://script.google.com/macros/s/.../exec"
+            />
+          </label>
+          <label className="field">
+            <span>Clave de sincronizacion</span>
+            <input
+              type="text"
+              value={clave}
+              onChange={(e) => setClave(e.target.value)}
+              placeholder="La que te enseño la funcion configurar()"
+            />
+          </label>
+          <button
+            className="btn primary block"
+            disabled={busy || !url.includes('/exec') || clave.trim().length < 8}
+            onClick={() => void conectarGoogle()}
+          >
+            Conectar con la hoja
+          </button>
+          <p className="tiny faint" style={{ marginTop: 12 }}>
+            La aplicacion web se publica con acceso “cualquier usuario”, asi que la clave es lo unico que
+            protege tus datos: no la publiques junto a la URL.
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="muted small">
+            Levanta el servidor en tu PC (<code>npm start</code>) y usa la direccion de red que imprime.
+            Tus datos no salen de tus maquinas.
+          </p>
+          <label className="field">
+            <span>Servidor</span>
+            <input
+              type="text"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="http://192.168.1.40:4321"
+            />
+          </label>
+          <label className="field">
+            <span>Email</span>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
+          </label>
+          <label className="field">
+            <span>Contrasena</span>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+          </label>
+          <div className="row" style={{ gap: 10 }}>
+            <button
+              className="btn primary"
+              style={{ flex: 1 }}
+              disabled={busy || !email || !password}
+              onClick={() => void conectarPropio('login')}
+            >
+              Entrar
+            </button>
+            <button
+              className="btn"
+              style={{ flex: 1 }}
+              disabled={busy || !email || password.length < 6}
+              onClick={() => void conectarPropio('register')}
+            >
+              Crear cuenta
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
+
 
 /* ------------------------------ Datos ----------------------------- */
 

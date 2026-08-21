@@ -44,41 +44,73 @@ Otros comandos:
 
 ## Instalarla como app
 
-**En el PC.** Abre `http://localhost:4321` en Chrome o Edge y pulsa el icono de
-instalar de la barra de direcciones. Queda como una aplicacion con su ventana y
-su icono. Si prefieres un ejecutable de verdad hay un envoltorio de Electron
-opcional:
+Hay dos caminos. El primero es el que querras casi seguro.
+
+### Sin servidores: GitHub Pages + una hoja de Google (recomendado)
+
+La app se publica en GitHub Pages (HTTPS gratis) y una hoja de calculo tuya con
+Apps Script hace de punto de sincronizacion. **Nada encendido en ningun sitio,
+coste cero**, y tus datos aterrizan ademas en una hoja que puedes abrir,
+filtrar y graficar.
+
+Es la unica forma de que el movil la instale **de verdad** (offline, pantalla
+completa, icono propio): los navegadores solo lo permiten por HTTPS o desde
+`localhost`, nunca desde una IP de tu red local.
+
+Los pasos, con capturas de que pulsar, estan en
+[`docs/GOOGLE.md`](docs/GOOGLE.md). Resumen: activas Pages en *Settings →
+Pages → Source: GitHub Actions*, pegas [`google/Codigo.gs`](google/Codigo.gs)
+en *Extensiones → Apps Script* de una hoja nueva, ejecutas `configurar`,
+publicas como aplicacion web y pegas la URL y la clave en **Ajustes →
+Sincronizacion**.
+
+Instalarla, una vez publicada:
+
+- **Android (Chrome):** menu ⋮ → *Instalar aplicacion*.
+- **iPhone (Safari):** compartir → *Añadir a pantalla de inicio*.
+- **PC (Chrome/Edge):** icono de instalar en la barra de direcciones.
+
+### Con tu propio servidor, en tu red
+
+Si prefieres que nada pase por Google, arranca el servidor de este repositorio
+(`npm start`) y usa la direccion de red que imprime. Funciona, pero el PC tiene
+que estar encendido y el movil no podra instalarla como aplicacion, solo abrirla
+en el navegador.
+
+Y si quieres un ejecutable de escritorio de verdad, hay un envoltorio de
+Electron opcional:
 
 ```bash
 cd apps/desktop && npm install && npm start
 npm run dist       # genera instalador en apps/desktop/release
 ```
 
-**En el movil.** Con el movil en la misma red que el PC, abre la direccion de
-red que imprime el servidor al arrancar (algo como `http://192.168.1.40:4321`) y
-usa *Añadir a pantalla de inicio*. A partir de ahi se abre a pantalla completa,
-funciona sin conexion y se sincroniza sola.
-
 ## Sincronizacion
 
-En **Ajustes → Sincronizacion**, crea una cuenta contra tu servidor y entra con
-ella en los dos dispositivos. A partir de ese momento:
+En **Ajustes → Sincronizacion** eliges el punto de encuentro: tu hoja de Google
+o tu propio servidor. Conectas los dos dispositivos al mismo y ya esta. En
+cualquiera de los dos casos:
 
 - Todo se guarda primero en el dispositivo (IndexedDB), asi que la app funciona
   entera sin conexion.
-- Los cambios se suben solos unos segundos despues, y tambien al volver a la app
-  o al recuperar la red.
+- Los cambios suben solos unos segundos despues, y tambien al volver a la app o
+  al recuperar la red.
 - La mezcla es registro a registro: gana la version mas reciente de cada uno. Si
   marcas el gimnasio en el movil y lees 20 paginas en el PC, se quedan las dos
   cosas; no hay "el ultimo que sincroniza pisa al otro".
 - Las claves de los registros diarios son deterministas (`habito:fecha`), asi
   que marcar lo mismo en dos sitios no crea duplicados.
 
-Los datos viven en `apps/server/data/` como ficheros JSON. Copiar esa carpeta es
-tu copia de seguridad. Nada sale de tus maquinas.
+Esa mezcla existe en tres sitios (cliente, servidor de Node y Apps Script) pero
+se escribe dos veces, porque el `.gs` no puede importar el paquete. Para que no
+se separen en silencio hay una prueba que carga el fichero `.gs` real y compara
+las dos implementaciones caso por caso.
 
-Si no quieres servidor, la app funciona igual en un solo dispositivo, y puedes
-mover los datos a mano con **Ajustes → Datos → Exportar / Importar JSON**.
+Con servidor propio los datos viven en `apps/server/data/` como ficheros JSON;
+con Google, en un fichero de tu Drive y en las pestañas de la hoja. En ambos
+casos son tuyos y puedes llevartelos con **Ajustes → Datos → Exportar**.
+
+Si no quieres sincronizar nada, la app funciona igual en un solo dispositivo.
 
 ## Como esta montado
 
@@ -88,7 +120,9 @@ packages/core        Motor sin interfaz: tipos, rachas, XP, deuda, sanciones,
 apps/web             PWA en React + TypeScript (la misma para PC y movil).
 apps/server          Servidor de sincronizacion (Express + ficheros JSON).
 apps/desktop         Envoltorio de Electron opcional.
+google/              Apps Script: sincronizacion sobre una hoja de calculo.
 docs/GUIA.md         El metodo: como usarlo para cumplir de verdad.
+docs/GOOGLE.md       Montar Pages + la hoja de Google, paso a paso.
 ```
 
 Toda la logica que decide si un dia esta cumplido, cuanta deuda generas o que se

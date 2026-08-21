@@ -1,0 +1,52 @@
+# Publica la app en GitHub Pages.
+#
+# GitHub Pages sirve por HTTPS, y HTTPS es justo lo que necesita un movil para
+# instalar la aplicacion de verdad (offline, pantalla completa, icono propio).
+# La sincronizacion la pone tu hoja de Google, asi que no hay ningun servidor
+# encendido en ningun sitio.
+name: Publicar la app
+
+on:
+  push:
+    branches: [claude/habit-tracker-multiplatform-tismie]
+    paths-ignore: ['docs/**', 'README.md', 'google/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  compilar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+        env:
+          # El nombre del repositorio es el prefijo de la URL en Pages.
+          VITE_BASE: /${{ github.event.repository.name }}/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: apps/web/dist
+
+  publicar:
+    needs: compilar
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
