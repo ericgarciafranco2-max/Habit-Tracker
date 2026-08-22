@@ -42,6 +42,24 @@ Otros comandos:
 | `npm run typecheck` | Comprueba tipos de todo el monorepo |
 | `npm run build` | Compila core + PWA a `apps/web/dist` |
 
+## Elegir version
+
+| | La aplicacion | La hoja de calculo |
+| --- | --- | --- |
+| Montarla | Publicar en Pages, 15 min | Pegar un fichero, 3 min |
+| Marcar en el movil | Un toque | Un toque (pestaña `Hoy`) |
+| Recordatorios | Solo con la app abierta | **Correo cada mañana, sin fallo** |
+| Informe al auditor | Lo mandas tu | **Sale solo cada domingo** |
+| Planificador y cronometro | Si | No |
+| Rituales y modo estricto | Si | No |
+| Graficos | A medida | Los de Sheets |
+
+Si vas a abrirla desde el movil todos los dias y quieres cero friccion, la hoja
+gana. Si quieres el sistema de presion completo, la aplicacion.
+
+Para la hoja de calculo: [`docs/SHEETS.md`](docs/SHEETS.md). Para la
+aplicacion, sigue leyendo.
+
 ## Instalarla como app
 
 Hay dos caminos. El primero es el que querras casi seguro.
@@ -120,9 +138,11 @@ packages/core        Motor sin interfaz: tipos, rachas, XP, deuda, sanciones,
 apps/web             PWA en React + TypeScript (la misma para PC y movil).
 apps/server          Servidor de sincronizacion (Express + ficheros JSON).
 apps/desktop         Envoltorio de Electron opcional.
-google/              Apps Script: sincronizacion sobre una hoja de calculo.
+google/              Apps Script: sincronizacion de la app sobre una hoja.
+google-sheets/       El tracker entero dentro de Google Sheets, con pruebas.
 docs/GUIA.md         El metodo: como usarlo para cumplir de verdad.
 docs/GOOGLE.md       Montar Pages + la hoja de Google, paso a paso.
+docs/SHEETS.md       La version que vive solo en una hoja de calculo.
 ```
 
 Toda la logica que decide si un dia esta cumplido, cuanta deuda generas o que se

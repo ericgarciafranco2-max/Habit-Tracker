@@ -17,7 +17,8 @@
     "dev:server": "npm run build:core && npm run dev -w @habit/server",
     "build": "npm run build:core && npm run build -w @habit/web",
     "start": "npm run build && npm run start -w @habit/server",
-    "test": "npm run test -w @habit/core",
+    "test": "npm run test -w @habit/core && npm run test:sheets",
+    "test:sheets": "node google-sheets/pruebas/ejecutar.mjs",
     "typecheck": "npm run typecheck -w @habit/core && npm run typecheck -w @habit/web"
   },
   "devDependencies": {
