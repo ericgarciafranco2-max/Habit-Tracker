@@ -116,7 +116,7 @@ class Hoja {
     this.nombre = nombre; this.celdas = new Map(); this.formulas = [];
     this.oculta = false; this.frozenRows = 0; this.frozenCols = 0; this.fusiones = [];
     // Una hoja nueva de Google son 1000 filas por 26 columnas, ni una mas.
-    this.maxFilas = 1000; this.maxCols = 26;
+    this.maxFilas = 1000; this.maxCols = 26; this.reglas = [];
   }
   insertRowsAfter(desde, cuantas) { contar('hoja.insertRowsAfter'); this.maxFilas += cuantas; return this; }
   insertColumnsAfter(desde, cuantas) { contar('hoja.insertColumnsAfter'); this.maxCols += cuantas; return this; }
@@ -161,10 +161,15 @@ class Hoja {
   }
 }
 ['clearConditionalFormatRules','removeChart','setHiddenGridlines','setColumnWidth','setColumnWidths',
- 'setRowHeight','hideColumns','insertChart','setConditionalFormatRules','autoResizeColumns',
- 'setTabColor','hideSheet'].forEach((m) => {
-  Hoja.prototype[m] = function () { contar('hoja.' + m); return this; };
-});
+ 'setRowHeight','hideColumns','insertChart','autoResizeColumns','setTabColor','hideSheet']
+  .forEach((m) => { Hoja.prototype[m] = function () { contar('hoja.' + m); return this; }; });
+
+// Guardamos las reglas para poder revisar sus formulas en las pruebas.
+Hoja.prototype.setConditionalFormatRules = function (reglas) {
+  contar('hoja.setConditionalFormatRules');
+  this.reglas = reglas || [];
+  return this;
+};
 // getRange() no viaja al servidor, solo describe un rango: no se cuenta.
 ['clear','getLastRow','getCharts','setFrozenRows','setFrozenColumns'].forEach((m) => {
   const original = Hoja.prototype[m];
@@ -210,9 +215,10 @@ const validador = () => {
   return v;
 };
 const reglaCF = () => {
-  const r = {};
-  ['whenFormulaSatisfied','setBackground','setFontColor','setRanges'].forEach((m) => { r[m] = () => r; });
-  r.build = () => ({});
+  const r = { formula: null };
+  ['setBackground','setFontColor','setRanges'].forEach((m) => { r[m] = () => r; });
+  r.whenFormulaSatisfied = (f) => { r.formula = f; return r; };
+  r.build = () => ({ formula: r.formula });
   return r;
 };
 

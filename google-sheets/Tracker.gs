@@ -318,10 +318,18 @@ function crearTracker() {
       return;
     }
     const trabajo = trabajoDeFase(ss, año, fase);
-    if (trabajo) trabajo();
+    if (trabajo) {
+      // Cronometro por fase: en el registro de ejecucion se ve cual se lleva
+      // el tiempo. Adivinar donde esta el cuello de botella de Sheets desde
+      // fuera no funciona; medirlo, si.
+      const t0 = Date.now();
+      trabajo();
+      Logger.log('fase ' + fase + ': ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s');
+    }
     marcarFase(fase);
   }
 
+  Logger.log('construccion completa en ' + ((Date.now() - ARRANQUE) / 1000).toFixed(1) + ' s');
   borrarContinuaciones();
   const hoja = ss.getSheetByName(HOJA_HOY);
   if (hoja) ss.setActiveSheet(hoja);
@@ -512,7 +520,16 @@ function construirMes(ss, mes, año) {
   h.getRange(FILA_REJILLA, apoyo, MAX_HABITOS, 1).setFormulas(objetivos);
   h.getRange(FILA_REJILLA, apoyo + 1, MAX_HABITOS, 1).setFormulas(minimos);
   h.getRange(FILA_REJILLA, apoyo + 2, MAX_HABITOS, 1).setFormulas(cuandos);
-  h.hideColumns(apoyo, 3);
+
+  // Hasta que dia de ESTE mes ha pasado ya: 0 si el mes aun no ha llegado, 99
+  // si ya termino. Va en una sola celda a proposito. Antes cada regla de
+  // formato llamaba a TODAY(), que es volatil, en las 775 casillas de cada
+  // rejilla: mas de nueve mil llamadas por mes y otras tantas reevaluaciones
+  // cada vez que la hoja respira.
+  h.getRange(1, apoyo + 3).setFormula(
+    '=IF(TODAY()<DATE(' + año + ',' + (mes + 1) + ',1),0,' +
+    'IF(TODAY()>DATE(' + año + ',' + (mes + 1) + ',' + dias + '),99,DAY(TODAY())))');
+  h.hideColumns(apoyo, 4);
 
   h.getRange(FILA_REJILLA, 1, MAX_HABITOS, 1)
     .setFormulaR1C1('=IF(' + HOJA_AJUSTES + '!R[' + (FILA_HABITOS + 1 - FILA_REJILLA) + ']C2="","",' +
@@ -547,8 +564,8 @@ function formatoRejilla(hoja, dias, mes, año) {
   // Solo pintamos de rojo el hueco de un dia que ya paso y en el que ese
   // habito era exigible. Los de cuota semanal no exigen un dia concreto, asi
   // que se quedan sin pintar en vez de acusarte de algo que no fallaste.
-  const pasado = 'AND(YEAR(TODAY())>=' + año + ',OR(MONTH(TODAY())>' + (mes + 1) +
-    ',AND(MONTH(TODAY())=' + (mes + 1) + ',B$2<=DAY(TODAY()))))';
+  // Una sola celda dice hasta que dia ha pasado; la regla solo la mira.
+  const pasado = 'B$2<=$' + letraColumna(dias + 9) + '$1';
   const exigible = 'OR(' + cuando + '="Todos los dias",' +
     'AND(' + cuando + '="Lunes a viernes",WEEKDAY(DATE(' + año + ',' + (mes + 1) + ',B$2),2)<=5),' +
     'AND(' + cuando + '="Fin de semana",WEEKDAY(DATE(' + año + ',' + (mes + 1) + ',B$2),2)>=6))';

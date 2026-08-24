@@ -179,6 +179,25 @@ try {
     exigibles + ' dias exigibles el mes en que empiezas');
 }
 
+/* ------------------- Nada volatil en el formato condicional ------------ */
+// Una funcion volatil (INDIRECT, TODAY, NOW, RAND, OFFSET) dentro de una regla
+// de formato se evalua en CADA casilla y se reevalua sin parar. Con doce
+// rejillas de 775 casillas son mas de cien mil evaluaciones continuas: la hoja
+// se arrastra y la construccion se queda sin tiempo. Esto ya paso dos veces.
+{
+  const volatiles = /\b(INDIRECT|TODAY|NOW|RAND|RANDBETWEEN|OFFSET)\s*\(/;
+  const culpables = [];
+  for (const hoja of libro.getSheets()) {
+    for (const regla of hoja.reglas || []) {
+      if (regla.formula && volatiles.test(regla.formula)) {
+        culpables.push(hoja.getName() + ': ' + regla.formula.slice(0, 60));
+      }
+    }
+  }
+  comprobar('ninguna regla de formato usa funciones volatiles', culpables.length === 0,
+    culpables.slice(0, 2).join(' | '));
+}
+
 /* --------------------- Formulas que Sheets entiende -------------------- */
 // Sheets no admite barras de escape dentro del formato de TEXT: contesta
 // "Error de analisis de formula" y la celda queda en #ERROR!.
