@@ -178,7 +178,19 @@ class Libro {
   getSheets() { return this.hojas.slice(); }
   deleteSheet(h) { this.hojas = this.hojas.filter((x) => x !== h); }
   setActiveSheet(h) { this.activa = h; return h; }
-  moveActiveSheet() {}
+  moveActiveSheet(posicion) {
+    contar('libro.moveActiveSheet');
+    // Sheets exige una posicion entre 1 y el numero de pestañas; fuera de ahi
+    // contesta "Invalid argument" y aborta.
+    if (posicion < 1 || posicion > this.hojas.length) {
+      throw new Error('Invalid argument (mover a la posicion ' + posicion +
+        ' con ' + this.hojas.length + ' pestañas)');
+    }
+    const i = this.hojas.indexOf(this.activa);
+    if (i < 0) return;
+    this.hojas.splice(i, 1);
+    this.hojas.splice(posicion - 1, 0, this.activa);
+  }
   getSpreadsheetTimeZone() { return 'Europe/Madrid'; }
   setSpreadsheetTimeZone() {}
   getUrl() { return 'https://docs.google.com/spreadsheets/d/prueba'; }

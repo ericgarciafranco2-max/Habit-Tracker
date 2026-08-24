@@ -1589,9 +1589,16 @@ function limpiarSobrantes(ss) {
 function ordenarPestañas(ss) {
   const orden = [HOJA_HOY, HOJA_PANEL].concat(MESES)
     .concat([HOJA_UNI, HOJA_PRESION, HOJA_METODOS, HOJA_FRASES, HOJA_AJUSTES]);
+  // La posicion se cuenta sobre las pestañas que EXISTEN, no sobre la lista
+  // completa: mientras se construye por partes faltan meses, y pedirle a
+  // Sheets la posicion 15 cuando solo hay diez pestañas es "Invalid argument".
+  let posicion = 0;
   for (let i = 0; i < orden.length; i++) {
     const h = ss.getSheetByName(orden[i]);
-    if (h) { ss.setActiveSheet(h); ss.moveActiveSheet(i + 1); }
+    if (!h) continue;
+    posicion++;
+    ss.setActiveSheet(h);
+    ss.moveActiveSheet(posicion);
   }
 }
 

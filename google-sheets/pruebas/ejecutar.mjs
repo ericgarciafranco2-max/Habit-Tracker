@@ -169,6 +169,13 @@ for (const nombre of ['Ago', 'Panel', 'Universidad', '_datos']) {
     hoja ? hoja.getMaxColumns() + ' columnas' : 'no existe');
 }
 
+// El orden de las pestañas se calcula sobre las que existen: durante una
+// construccion por partes faltan meses, y pedir una posicion mayor que el
+// numero de pestañas aborta con "Invalid argument".
+comprobar('las pestañas quedan en orden, con Hoy la primera',
+  libro.getSheets()[0].getName() === 'Hoy' && libro.getSheets()[1].getName() === 'Panel',
+  libro.getSheets().slice(0, 3).map((h) => h.getName()).join(', '));
+
 /* ------------------ Construccion reanudable ---------------------------- */
 // Apps Script corta a los seis minutos. La construccion tiene que pararse a
 // tiempo, recordar por donde iba y terminar en la siguiente pasada, en vez de
