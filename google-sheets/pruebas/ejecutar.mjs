@@ -14,7 +14,7 @@ import { entorno, libro, correos, alertas, contador, reiniciarContador } from '.
 
 const codigo = fs.readFileSync(new URL('../Tracker.gs', import.meta.url), 'utf8');
 const ctx = vm.createContext({ ...entorno, Date, Math, Object, String, Number, Array, JSON, RegExp, isNaN });
-vm.runInContext(codigo + '\n;globalThis.__api = { crearTracker, recalcularTodo, prepararHoy, liquidarAyer, informeSemanal, recordatorioDiario, onEdit, verificar, leerHabitos, leerConfig, estadoDelDia, leerAño, textoDeuda, calcularRacha, exigiblesDelMes, cumplido, aplicaHoy };', ctx);
+vm.runInContext(codigo + '\n;globalThis.__api = { crearTracker, recalcularTodo, prepararHoy, liquidarAyer, informeSemanal, recordatorioDiario, onEdit, verificar, leerHabitos, leerConfig, estadoDelDia, leerAño, textoDeuda, calcularRacha, exigiblesDelMes, cumplido, aplicaHoy, fechaInicio };', ctx);
 const api = ctx.__api;
 
 let fallos = 0;
@@ -62,8 +62,10 @@ comprobar('los habitos de evitar se invierten',
 api.recalcularTodo();
 const resumen = rejilla.getRange(4, new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate() + 2, 3, 4).getValues();
 comprobar('el resumen del mes se escribe', resumen[0][0] === 1, 'hechos = ' + resumen[0][0]);
-comprobar('calcula los dias exigibles', Number(resumen[0][1]) === hoy.getDate(),
-  'exigibles ' + resumen[0][1] + ' para dia ' + hoy.getDate());
+// Se cuenta desde la fecha en que se monto el tracker, no desde el dia 1 del
+// mes: los dias anteriores no son fallos tuyos.
+comprobar('los exigibles del mes empiezan el dia que montaste el tracker',
+  Number(resumen[0][1]) === 1, 'exigibles ' + resumen[0][1] + ' habiendo empezado hoy');
 
 const panel = libro.getSheetByName('Panel');
 comprobar('el panel escribe sus indicadores', String(panel.getRange(5, 1).getValue()).indexOf('%') > 0,
@@ -157,6 +159,39 @@ try {
   comprobar('rehacer el tracker sobre uno ya montado', false, e.message);
 }
 
+
+/* ------------------- Nada cuenta antes de empezar ---------------------- */
+// Un habito de "evitar" se marca solo si has caido, asi que su casilla vacia
+// significa exito. Sin una fecha de inicio, la racha subia desde el 1 de enero
+// y un habito recien creado aparecia con 236 dias seguidos.
+{
+  const evitar = api.leerHabitos().find((h) => h.tipo === 'Evitar');
+  const datosAño = api.leerAño(libro, new Date().getFullYear());
+  const desde = api.fechaInicio();
+  comprobar('la fecha de inicio queda guardada', Boolean(desde), String(desde));
+  const rachaEvitar = api.calcularRacha(datosAño, evitar, new Date(), new Date().getFullYear(), desde);
+  comprobar('un habito de evitar sin tocar no inventa racha', rachaEvitar <= 1,
+    rachaEvitar + ' dias de racha en "' + evitar.nombre + '"');
+
+  const exigibles = api.exigiblesDelMes(
+    api.leerHabitos()[0], new Date().getMonth(), new Date().getFullYear(), new Date(), desde);
+  comprobar('los dias exigibles se cuentan desde que empezaste', exigibles <= 1,
+    exigibles + ' dias exigibles el mes en que empiezas');
+}
+
+/* --------------------- Formulas que Sheets entiende -------------------- */
+// Sheets no admite barras de escape dentro del formato de TEXT: contesta
+// "Error de analisis de formula" y la celda queda en #ERROR!.
+{
+  const conEscape = [];
+  for (const hoja of libro.getSheets()) {
+    for (const f of hoja.formulas) {
+      if (f.f.indexOf('\\') >= 0) conEscape.push(hoja.getName() + ': ' + f.f);
+    }
+  }
+  comprobar('ninguna formula lleva barras de escape', conEscape.length === 0,
+    conEscape.slice(0, 2).join(' | '));
+}
 
 /* ---------------------- Tamaño de las pestañas ------------------------- */
 // Una hoja de Google nace con 26 columnas. La rejilla de un mes llega a la 40

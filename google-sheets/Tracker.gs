@@ -64,8 +64,14 @@ function letraColumna(n) {
   return s;
 }
 
-/** Fila donde empieza la tabla de hábitos en Ajustes. */
-const FILA_HABITOS = 12;
+/**
+ * Fila de la cabecera de la tabla de habitos en Ajustes.
+ *
+ * Tiene que quedar por debajo del bloque de configuracion (filas 5 a 12): con
+ * el valor anterior, la ultima fila de configuracion caia justo encima de esta
+ * cabecera y se perdia al escribir la tabla.
+ */
+const FILA_HABITOS = 15;
 /** Fila donde empieza la rejilla de hábitos en cada mes. */
 const FILA_REJILLA = 4;
 const MAX_HABITOS = 25;
@@ -383,9 +389,15 @@ function construirAjustes(ss, año) {
     ['Email de tu auditor', ''],
     ['Minimo semanal exigido (%)', 85],
     ['Congelaciones al mes', 2],
+    ['Empezado el', ''],
   ];
   h.getRange(4, 1).setValue('CONFIGURACION').setFontWeight('bold').setFontColor(C.suave).setFontSize(10);
+  // Si ya habia una fecha de inicio, se respeta: rehacer el tracker no puede
+  // borrar desde cuando llevas registrando.
+  const inicioPrevio = leerConfig('Empezado el');
+  config[7][1] = inicioPrevio || new Date();
   h.getRange(5, 1, config.length, 2).setValues(config);
+  h.getRange(5 + config.length - 1, 2).setNumberFormat('dd/mm/yyyy');
   h.getRange(5, 1, config.length, 1).setFontColor(C.suave);
   h.getRange(5, 2, config.length, 1).setBackground(C.fondo).setFontWeight('bold');
   h.getRange(6, 2).setNumberFormat('0');
@@ -586,7 +598,8 @@ function aplicarValidaciones(ss, habitos, año, soloMes) {
 function construirHoy(ss) {
   const h = hojaLimpia(ss, HOJA_HOY, 11 + MAX_HABITOS + 24, 10);
   titulo(h, 'Hoy', '', 8);
-  h.getRange(2, 1).setFormula('=TEXT(TODAY(),"dddd, d \\d\\e mmmm")');
+  h.getRange(2, 1).setFormula(
+    '=TEXT(TODAY(),"dddd")&", "&DAY(TODAY())&" de "&TEXT(TODAY(),"mmmm")');
 
   h.getRange(4, 1).setValue('LAS 3 DE HOY').setFontWeight('bold').setFontColor(C.suave).setFontSize(10);
   h.getRange(5, 1, 3, 1).setValues([['1.'], ['2.'], ['3.']]).setFontColor(C.suave);
@@ -629,6 +642,7 @@ function prepararHoy() {
     .setBackground(null).setFontColor(C.tinta).setBorder(false, false, false, false, false, false);
 
   const datos = leerAño(ss, año);
+  const desde = fechaInicio();
   const aplican = habitos.filter(function (x) { return aplicaHoy(x, hoy); });
 
   // Todo el bloque de habitos se escribe de una vez. Celda a celda eran unos
@@ -644,7 +658,7 @@ function prepararHoy() {
     const hab = aplican[i];
     const valor = columnaHoy ? columnaHoy[hab.indice][0] : '';
     const esCasilla = hab.medida === 'Si/No';
-    const racha = calcularRacha(datos, hab, hoy, año);
+    const racha = calcularRacha(datos, hab, hoy, año, desde);
     valores.push([
       hab.icono + '  ' + hab.nombre,
       esCasilla ? valor === true || valor === 1 : (typeof valor === 'number' ? valor : ''),
@@ -763,7 +777,7 @@ function campoDeCierre(hoja, fila) {
 function leerConfig(clave) {
   const h = SpreadsheetApp.getActive().getSheetByName(HOJA_AJUSTES);
   if (!h) return '';
-  const filas = h.getRange(5, 1, 7, 2).getValues();
+  const filas = h.getRange(5, 1, FILA_HABITOS - 6, 2).getValues();
   for (let i = 0; i < filas.length; i++) {
     if (String(filas[i][0]).indexOf(clave) === 0) return filas[i][1];
   }
@@ -850,11 +864,16 @@ function alObjetivo(hab, valor) {
  * Racha en dias exigibles: los dias que el habito no tocaba no la rompen, y
  * el dia en curso no cuenta como fallo hasta que termina.
  */
-function calcularRacha(datos, hab, hasta, año) {
+function calcularRacha(datos, hab, hasta, año, desde) {
   let racha = 0;
+  const tope = desde || fechaInicio();
   const cursor = new Date(hasta.getFullYear(), hasta.getMonth(), hasta.getDate());
   for (let i = 0; i < 400; i++) {
     if (cursor.getFullYear() !== año) break;
+    // Los dias anteriores a empezar no son merito tuyo. Sin este corte, un
+    // habito de "evitar" sumaria racha desde el 1 de enero: su casilla vacia
+    // significa "no he caido", y antes de existir el tracker estaban todas.
+    if (tope && cursor < tope) break;
     if (aplicaHoy(hab, cursor) && !esCuota(hab)) {
       const v = valorDe(datos, cursor.getMonth(), cursor.getDate(), hab.indice);
       if (cumplido(hab, v)) racha++;
@@ -869,12 +888,17 @@ function calcularRacha(datos, hab, hasta, año) {
 }
 
 /** Dias del mes en los que ese habito era exigible, hasta la fecha dada. */
-function exigiblesDelMes(hab, mes, año, hasta) {
+function exigiblesDelMes(hab, mes, año, hasta, desde) {
   const dias = new Date(año, mes + 1, 0).getDate();
   const tope = (hasta.getFullYear() === año && hasta.getMonth() === mes) ? hasta.getDate() : dias;
-  if (esCuota(hab)) return Math.round((tope / 7) * cuotaSemanal(hab));
+  // Igual que con la racha: el mes en que empezaste solo cuenta desde ese dia.
+  const primero = desde && desde.getFullYear() === año && desde.getMonth() === mes
+    ? desde.getDate()
+    : (desde && (desde.getFullYear() > año || (desde.getFullYear() === año && desde.getMonth() > mes)) ? tope + 1 : 1);
+  if (primero > tope) return 0;
+  if (esCuota(hab)) return Math.round(((tope - primero + 1) / 7) * cuotaSemanal(hab));
   let n = 0;
-  for (let d = 1; d <= tope; d++) if (aplicaHoy(hab, new Date(año, mes, d))) n++;
+  for (let d = primero; d <= tope; d++) if (aplicaHoy(hab, new Date(año, mes, d))) n++;
   return n;
 }
 
@@ -913,6 +937,14 @@ function estadoDelDia(datos, habitos, fecha, año, penitencia) {
       ? 'penitencia sin cumplir'
       : pendientes.length ? 'te faltan: ' + pendientes.join(', ') : '',
   };
+}
+
+/** Dia en que se monto el tracker. Antes de esa fecha no hay nada que contar. */
+function fechaInicio() {
+  const v = leerConfig('Empezado el');
+  if (!v) return null;
+  const d = v instanceof Date ? v : new Date(v);
+  return isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
 function fechaISO(f) {
@@ -1078,6 +1110,7 @@ function recalcularTodo() {
   const hoy = new Date();
   const año = Number(leerConfig('Año')) || hoy.getFullYear();
   const datos = leerAño(ss, año);
+  const desde = fechaInicio();
 
   // Resumen de cada mes: hechos, exigibles, porcentaje y racha por habito.
   for (let m = 0; m < 12; m++) {
@@ -1092,20 +1125,20 @@ function recalcularTodo() {
       for (let d = 1; d <= diasMes; d++) {
         if (cumplido(hab, valorDe(datos, m, d, i))) hechos++;
       }
-      const exigibles = exigiblesDelMes(hab, m, año, hoy);
+      const exigibles = exigiblesDelMes(hab, m, año, hoy, desde);
       const finDeMes = new Date(año, m, diasMes);
       const hasta = finDeMes < hoy ? finDeMes : hoy;
       filas.push([
         hechos,
         exigibles,
         exigibles ? Math.min(1, hechos / exigibles) : '',
-        m === hoy.getMonth() ? calcularRacha(datos, hab, hasta, año) : '',
+        m === hoy.getMonth() ? calcularRacha(datos, hab, hasta, año, desde) : '',
       ]);
     }
     hoja.getRange(FILA_REJILLA, diasMes + 2, MAX_HABITOS, 4).setValues(filas);
   }
 
-  panelAlDia(ss, habitos, datos, hoy, año);
+  panelAlDia(ss, habitos, datos, hoy, año, desde);
 }
 
 function buscarPorIndice(habitos, indice) {
@@ -1113,7 +1146,7 @@ function buscarPorIndice(habitos, indice) {
   return null;
 }
 
-function panelAlDia(ss, habitos, datos, hoy, año) {
+function panelAlDia(ss, habitos, datos, hoy, año, desde) {
   const h = ss.getSheetByName(HOJA_PANEL);
   if (!h) return;
   const mes = hoy.getMonth();
@@ -1123,7 +1156,8 @@ function panelAlDia(ss, habitos, datos, hoy, año) {
   let perfectos = 0, ceros = 0, xp = 0, sumaHechos = 0, sumaExigibles = 0;
   const porDia = [];
   for (let d = 1; d <= 31; d++) {
-    if (d > diasMes || d > hoy.getDate()) { porDia.push([d, 0]); continue; }
+    const fecha = new Date(año, mes, d);
+    if (d > diasMes || d > hoy.getDate() || (desde && fecha < desde)) { porDia.push([d, 0]); continue; }
     const est = estadoDelDia(datos, habitos, new Date(año, mes, d), año, castigo);
     porDia.push([d, est.ratio]);
     sumaHechos += est.hechos;
@@ -1141,6 +1175,7 @@ function panelAlDia(ss, habitos, datos, hoy, año) {
     for (let d = 1; d <= dias; d++) {
       const fecha = new Date(año, m, d);
       if (fecha > hoy) break;
+      if (desde && fecha < desde) continue;
       const est = estadoDelDia(datos, habitos, fecha, año, castigo);
       hechos += est.hechos;
       exigibles += est.exigibles;
@@ -1155,8 +1190,8 @@ function panelAlDia(ss, habitos, datos, hoy, año) {
     const hab = habitos[i];
     let hechos = 0;
     for (let d = 1; d <= diasMes; d++) if (cumplido(hab, valorDe(datos, mes, d, hab.indice))) hechos++;
-    const exigibles = exigiblesDelMes(hab, mes, año, hoy);
-    const racha = calcularRacha(datos, hab, hoy, año);
+    const exigibles = exigiblesDelMes(hab, mes, año, hoy, desde);
+    const racha = calcularRacha(datos, hab, hoy, año, desde);
     mejorRacha = Math.max(mejorRacha, racha);
     tabla.push([hab.icono + ' ' + hab.nombre, hechos, exigibles,
       exigibles ? Math.min(1, hechos / exigibles) : 0, racha, '']);
