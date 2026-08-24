@@ -102,9 +102,29 @@ const RECOMPENSAS_INICIALES = [
 /* Menú                                                                */
 /* ================================================================== */
 
+/**
+ * La interfaz de la hoja solo existe si el script se ejecuta desde la hoja
+ * abierta. Desde el editor de Apps Script no hay dialogos, asi que todo lo que
+ * los usa tiene que seguir funcionando sin ellos.
+ */
+function interfaz() {
+  try {
+    return SpreadsheetApp.getUi();
+  } catch (err) {
+    return null;
+  }
+}
+
+function avisar(titulo, mensaje) {
+  const ui = interfaz();
+  if (ui) ui.alert(titulo, mensaje, ui.ButtonSet.OK);
+  else Logger.log(titulo + '\n' + mensaje);
+}
+
 function onOpen() {
-  SpreadsheetApp.getUi()
-    .createMenu('⚡ Habit Tracker')
+  const ui = interfaz();
+  if (!ui) return;
+  ui.createMenu('⚡ Habit Tracker')
     .addItem('Crear / rehacer el tracker', 'crearTracker')
     .addSeparator()
     .addItem('Preparar el dia de hoy', 'prepararHoy')
@@ -129,10 +149,16 @@ function onOpen() {
 
 function crearTracker() {
   const ss = SpreadsheetApp.getActive();
-  const ui = SpreadsheetApp.getUi();
+  if (!ss) {
+    throw new Error(
+      'Este script no esta enganchado a ninguna hoja de calculo. Abrelo desde la hoja ' +
+      'con Extensiones > Apps Script, no desde script.google.com.',
+    );
+  }
+  const ui = interfaz();
   const año = new Date().getFullYear();
 
-  if (ss.getSheetByName(HOJA_AJUSTES)) {
+  if (ss.getSheetByName(HOJA_AJUSTES) && ui) {
     const r = ui.alert(
       'Rehacer el tracker',
       'Ya hay un tracker en esta hoja. Se rehara la estructura.\n\n' +
@@ -160,13 +186,12 @@ function crearTracker() {
   prepararHoy();
 
   ss.setActiveSheet(ss.getSheetByName(HOJA_HOY));
-  ui.alert(
+  avisar(
     'Listo',
     'Tu tracker esta montado.\n\n' +
       '1. Repasa la pestaña Ajustes: tus habitos, tus horarios y el email de tu auditor.\n' +
       '2. Marca cada dia en la pestaña Hoy.\n' +
       '3. Menu ⚡ Habit Tracker > Activar avisos automaticos, para el correo de cada mañana y el informe de los domingos.',
-    ui.ButtonSet.OK,
   );
 }
 
@@ -1160,13 +1185,12 @@ function activarAvisos() {
   ScriptApp.newTrigger('liquidarAyer').timeBased().atHour(4).everyDays(1).create();
   ScriptApp.newTrigger('informeSemanal').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(20).create();
 
-  SpreadsheetApp.getUi().alert(
+  avisar(
     'Avisos activados',
     'A partir de ahora:\n\n' +
       '• Cada mañana a las 7:00 recibes en ' + email + ' tus habitos del dia, tu deuda y una frase.\n' +
       '• Cada madrugada a las 4:00 se liquida el dia anterior: lo que no marcaste cuenta como fallo y genera deuda.\n' +
       '• Cada domingo a las 20:00 sale el informe de la semana, tambien a tu auditor si pusiste su email.',
-    SpreadsheetApp.getUi().ButtonSet.OK,
   );
 }
 
@@ -1352,7 +1376,7 @@ function verificar() {
     avisos ? '✅ Avisos automaticos activos' : '⚠️ Avisos sin activar (menu > Activar avisos automaticos)',
     leerConfig('Email de tu auditor') ? '✅ Tienes auditor' : '⚠️ Sin auditor: el informe solo te llegara a ti',
   ];
-  SpreadsheetApp.getUi().alert('Comprobacion', lineas.join('\n\n'), SpreadsheetApp.getUi().ButtonSet.OK);
+  avisar('Comprobacion', lineas.join('\n\n'));
 }
 
 function limpiarSobrantes(ss) {
