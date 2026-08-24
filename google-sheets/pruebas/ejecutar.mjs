@@ -158,6 +158,17 @@ try {
 }
 
 
+/* ---------------------- Tamaño de las pestañas ------------------------- */
+// Una hoja de Google nace con 26 columnas. La rejilla de un mes llega a la 40
+// y el panel a la 34, asi que hay que ampliarlas antes de escribir: si no,
+// Sheets contesta "Those columns are out of bounds" y aborta.
+for (const nombre of ['Ago', 'Panel', 'Universidad', '_datos']) {
+  const hoja = libro.getSheetByName(nombre);
+  comprobar('la pestaña ' + nombre + ' se amplia a lo que necesita',
+    Boolean(hoja) && hoja.getMaxColumns() >= 26,
+    hoja ? hoja.getMaxColumns() + ' columnas' : 'no existe');
+}
+
 /* ------------------ Construccion reanudable ---------------------------- */
 // Apps Script corta a los seis minutos. La construccion tiene que pararse a
 // tiempo, recordar por donde iba y terminar en la siguiente pasada, en vez de

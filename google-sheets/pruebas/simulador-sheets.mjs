@@ -115,26 +115,41 @@ class Hoja {
   constructor(nombre) {
     this.nombre = nombre; this.celdas = new Map(); this.formulas = [];
     this.oculta = false; this.frozenRows = 0; this.frozenCols = 0; this.fusiones = [];
+    // Una hoja nueva de Google son 1000 filas por 26 columnas, ni una mas.
+    this.maxFilas = 1000; this.maxCols = 26;
   }
+  insertRowsAfter(desde, cuantas) { contar('hoja.insertRowsAfter'); this.maxFilas += cuantas; return this; }
+  insertColumnsAfter(desde, cuantas) { contar('hoja.insertColumnsAfter'); this.maxCols += cuantas; return this; }
   setFrozenRows(n) { this.frozenRows = n; return this; }
   setFrozenColumns(n) { this.frozenCols = n; return this; }
   getFrozenRows() { return this.frozenRows; }
   getFrozenColumns() { return this.frozenCols; }
-  getMaxColumns() { return 60; }
+  getMaxColumns() { return this.maxCols; }
   getName() { return this.nombre; }
   _clave(f, c) { return f + ':' + c; }
   _set(f, c, v) {
     if (f < 1 || c < 1) throw new Error('celda fuera de rango: R' + f + 'C' + c);
-    if (f > 1000 || c > 200) throw new Error('celda muy lejos: R' + f + 'C' + c + ' en ' + this.nombre);
     this.celdas.set(this._clave(f, c), v);
   }
   _get(f, c) { const v = this.celdas.get(this._clave(f, c)); return v === undefined ? '' : v; }
   getRange(a, b, c, d) {
     if (typeof a === 'string') throw new Error('getRange con texto no soportado: ' + a);
-    return new Rango(this, a, b, c === undefined ? 1 : c, d === undefined ? 1 : d);
+    const filas = c === undefined ? 1 : c;
+    const cols = d === undefined ? 1 : d;
+    // Sheets lanza justo estos mensajes; asi el fallo se ve aqui y no en la
+    // hoja de verdad a los diez segundos de ejecucion.
+    if (b + cols - 1 > this.maxCols) {
+      throw new Error('Those columns are out of bounds. (' + this.nombre + ': hasta la columna ' +
+        (b + cols - 1) + ', la hoja tiene ' + this.maxCols + ')');
+    }
+    if (a + filas - 1 > this.maxFilas) {
+      throw new Error('Those rows are out of bounds. (' + this.nombre + ': hasta la fila ' +
+        (a + filas - 1) + ', la hoja tiene ' + this.maxFilas + ')');
+    }
+    return new Rango(this, a, b, filas, cols);
   }
   getLastRow() { let m = 0; for (const k of this.celdas.keys()) m = Math.max(m, Number(k.split(':')[0])); return m; }
-  getMaxRows() { return 1000; }
+  getMaxRows() { return this.maxFilas; }
   getCharts() { return []; }
   clear() { this.celdas.clear(); this.formulas = []; return this; }
   hideSheet() { this.oculta = true; return this; }

@@ -318,10 +318,27 @@ function crearMesesRestantes() {
   );
 }
 
-function hojaLimpia(ss, nombre) {
+/**
+ * Deja la pestaña lista para escribir en ella.
+ *
+ * `filas` y `columnas` son el tamaño que necesita: una hoja de Google nace con
+ * 1000 filas y 26 columnas, y aqui se escribe mas a la derecha (la rejilla de
+ * un mes llega a la 40 y el panel a la 34). Escribir fuera de ese tamaño no
+ * amplia la hoja: lanza "Those columns are out of bounds".
+ */
+function hojaLimpia(ss, nombre, filas, columnas) {
   let h = ss.getSheetByName(nombre);
   const nueva = !h;
   if (nueva) h = ss.insertSheet(nombre);
+
+  if (columnas) {
+    const maxC = h.getMaxColumns();
+    if (maxC < columnas) h.insertColumnsAfter(maxC, columnas - maxC);
+  }
+  if (filas) {
+    const maxF = h.getMaxRows();
+    if (maxF < filas) h.insertRowsAfter(maxF, filas - maxF);
+  }
 
   if (!nueva) {
     // Una pestaña recien creada no tiene nada que limpiar; hacerlo igualmente
@@ -355,7 +372,7 @@ function cabecera(hoja, fila, columna, valores) {
 /* ------------------------------ Ajustes --------------------------- */
 
 function construirAjustes(ss, año) {
-  const h = hojaLimpia(ss, HOJA_AJUSTES);
+  const h = hojaLimpia(ss, HOJA_AJUSTES, FILA_HABITOS + MAX_HABITOS + 6, 16);
   titulo(h, 'Ajustes', 'Cambia aqui lo que quieras. Todo lo demas se recalcula solo.', 14);
 
   const config = [
@@ -425,8 +442,10 @@ function nota(hoja, fila, texto) {
 /* ------------------------------- Meses ---------------------------- */
 
 function construirMes(ss, mes, año) {
-  const h = hojaLimpia(ss, MESES[mes]);
-  const dias = new Date(año, mes + 1, 0).getDate();
+  // La rejilla ocupa hasta la columna dias+8 (objetivo, minimo y calendario).
+  const diasDelMes = new Date(año, mes + 1, 0).getDate();
+  const h = hojaLimpia(ss, MESES[mes], FILA_REJILLA + MAX_HABITOS + 4, diasDelMes + 10);
+  const dias = diasDelMes;
   titulo(h, MESES_LARGO[mes].charAt(0).toUpperCase() + MESES_LARGO[mes].slice(1),
     'Marca aqui o, mas comodo, en la pestaña Hoy.', dias + 5);
 
@@ -565,7 +584,7 @@ function aplicarValidaciones(ss, habitos, año, soloMes) {
 /* ------------------------------- Hoy ------------------------------ */
 
 function construirHoy(ss) {
-  const h = hojaLimpia(ss, HOJA_HOY);
+  const h = hojaLimpia(ss, HOJA_HOY, 11 + MAX_HABITOS + 24, 10);
   titulo(h, 'Hoy', '', 8);
   h.getRange(2, 1).setFormula('=TEXT(TODAY(),"dddd, d \\d\\e mmmm")');
 
@@ -906,7 +925,7 @@ function fechaISO(f) {
 /* ================================================================== */
 
 function construirDatos(ss, año) {
-  const h = hojaLimpia(ss, HOJA_DATOS);
+  const h = hojaLimpia(ss, HOJA_DATOS, 500, 20);
   h.getRange(1, 1).setValue('Datos internos. No hace falta que toques nada aqui.');
   cabecera(h, 2, 1, ['Fecha', 'Animo', 'Energia', 'Sueño', 'Salio bien', 'Me freno']);
   cabecera(h, 2, 8, ['Fecha', 'Habito', 'Cantidad', 'Unidad', 'Motivo', 'Pagada']);
@@ -998,7 +1017,8 @@ function ultimaFilaBloque(hoja, columna) {
 /* ================================================================== */
 
 function construirPanel(ss) {
-  const h = hojaLimpia(ss, HOJA_PANEL);
+  // Los bloques de apoyo de los graficos viven en las columnas 28 a 33.
+  const h = hojaLimpia(ss, HOJA_PANEL, MAX_HABITOS + 20, 36);
   titulo(h, 'Panel', 'Se recalcula al abrir la hoja y desde el menu.', 10);
 
   const kpis = ['Cumplido del mes', 'Dias perfectos', 'Dias en cero', 'Mejor racha', 'XP del mes'];
@@ -1165,7 +1185,7 @@ function panelAlDia(ss, habitos, datos, hoy, año) {
 /* ================================================================== */
 
 function construirUniversidad(ss) {
-  const h = hojaLimpia(ss, HOJA_UNI);
+  const h = hojaLimpia(ss, HOJA_UNI, 280, 12);
   titulo(h, 'Universidad', 'Asignaturas, examenes, entregas y horas de estudio.', 10);
 
   h.getRange(4, 1).setValue('ASIGNATURAS').setFontWeight('bold').setFontColor(C.suave).setFontSize(10);
@@ -1230,7 +1250,7 @@ function construirUniversidad(ss) {
 /* ================================================================== */
 
 function construirPresion(ss) {
-  const h = hojaLimpia(ss, HOJA_PRESION);
+  const h = hojaLimpia(ss, HOJA_PRESION, 120, 10);
   titulo(h, 'Presion', 'Donde fallar deja de ser gratis.', 8);
 
   h.getRange(4, 1).setValue('CONTRATO DE COMPROMISO')
@@ -1306,7 +1326,7 @@ function asignarPenitencia(dureza, motivo) {
 /* ================================================================== */
 
 function construirMetodos(ss) {
-  const h = hojaLimpia(ss, HOJA_METODOS);
+  const h = hojaLimpia(ss, HOJA_METODOS, TECNICAS.length + 12, 6);
   titulo(h, 'Metodos', 'Tecnicas que hacen que un sistema de habitos funcione.', 4);
   cabecera(h, 4, 1, ['Tecnica', 'De quien', 'Que es', 'Como la aplicas aqui']);
   h.getRange(5, 1, TECNICAS.length, 4).setValues(TECNICAS);
@@ -1318,7 +1338,7 @@ function construirMetodos(ss) {
 }
 
 function construirFrases(ss) {
-  const h = hojaLimpia(ss, HOJA_FRASES);
+  const h = hojaLimpia(ss, HOJA_FRASES, FRASES.length + 12, 5);
   titulo(h, 'Frases', 'Para cuando no apetezca. Cada dia sale una en el correo.', 3);
   cabecera(h, 4, 1, ['Frase', 'Quien', 'Fuente']);
   h.getRange(5, 1, FRASES.length, 3).setValues(FRASES);
