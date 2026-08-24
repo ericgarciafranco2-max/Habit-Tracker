@@ -21,6 +21,10 @@ mismas frases.
    - Google pedira permisos: *Revisar permisos* → tu cuenta → *Configuracion
      avanzada* → *Ir a (proyecto)* → *Permitir*. El aviso de "aplicacion no
      verificada" sale porque el script es tuyo y no esta en ninguna tienda.
+   - Construye lo esencial y el mes en curso, y luego los demas meses mientras
+     le quede tiempo. Si al terminar te dice que quedan meses por crear, usa
+     **⚡ Habit Tracker → Crear los meses que faltan** las veces que haga
+     falta. Puedes empezar a usarlo sin esperar a que esten los doce.
 6. **⚡ Habit Tracker → Activar avisos automaticos**.
 
 Ya esta. En el movil, instala Google Sheets y ancla la hoja a la pantalla de
@@ -88,6 +92,17 @@ cuanto mueves una fila.
 **Los porcentajes se recalculan** al abrir la hoja, con el menu *Recalcular
 todo* y en la liquidacion de cada madrugada.
 
+**Nada de formulas volatiles en el formato condicional.** Los colores de la
+rejilla comparan cada casilla con el objetivo y el minimo de su fila, que
+viajan a unas columnas ocultas de cada mes. La primera version los leia con
+INDIRECT desde Ajustes: correcto, pero INDIRECT es volatil, y con doce
+rejillas eran mas de cien mil celdas reevaluandose sin parar. La hoja se
+arrastraba y la construccion agotaba los seis minutos de Apps Script.
+
+**La construccion se puede reanudar.** Si se acaba el tiempo, deja la hoja
+usable (lo esencial y el mes en curso) y te dice cuantos meses faltan, en vez
+de morir a medias.
+
 **La liquidacion es idempotente.** Deja una marca en la pestaña oculta
 `_datos`, asi que abrir la hoja tres veces no te cobra tres veces la misma
 deuda.
@@ -115,6 +130,7 @@ dias crecia usando la ultima fila de toda la hoja en vez de la de su bloque.
 | Los porcentajes no cambian | Menu → *Recalcular todo* |
 | No llegan los correos | Menu → *Activar avisos automaticos*, y revisa el email en Ajustes |
 | Añado un habito y no sale en Hoy | Menu → *Preparar el dia de hoy* |
+| Faltan pestañas de meses | Menu → *Crear los meses que faltan* |
 | Quiero empezar de cero | Menu → *Crear / rehacer el tracker* |
 
 Antes de nada, prueba **⚡ Habit Tracker → Comprobar que todo esta bien**: te

@@ -158,6 +158,39 @@ try {
 }
 
 
+/* ------------------ Construccion por partes (sin tiempo) ---------------- */
+// Si Apps Script se queda sin tiempo, crearTracker tiene que dejar la hoja
+// usable y decir cuantos meses faltan, no morir a medias. Se comprueba con un
+// reloj falso que adelanta seis minutos.
+{
+  const mod = await import('./simulador-sheets.mjs?aislado=1');
+  const reloj = { salto: 0 };
+  class RelojFalso extends Date {
+    static now() { return Date.now() + reloj.salto; }
+  }
+  const ctx2 = vm.createContext({
+    ...mod.entorno, Date: RelojFalso, Math, Object, String, Number, Array, JSON, RegExp, isNaN,
+  });
+  vm.runInContext(codigo + '\n;globalThis.__api = { crearTracker, crearMesesRestantes };', ctx2);
+
+  reloj.salto = 6 * 60 * 1000; // se acabo el tiempo nada mas empezar
+  ctx2.__api.crearTracker();
+
+  const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  const creados = () => meses.filter((m) => mod.libro.getSheetByName(m)).length;
+
+  comprobar('sin tiempo, deja la hoja usable con el mes en curso', creados() === 1,
+    creados() + ' meses creados');
+  comprobar('sin tiempo, avisa de cuantos meses faltan',
+    mod.alertas.join(' ').indexOf('Quedan 11 meses') > 0, mod.alertas[mod.alertas.length - 1]);
+  comprobar('sin tiempo, la pestaña Hoy si esta',
+    Boolean(mod.libro.getSheetByName('Hoy')) && Boolean(mod.libro.getSheetByName('Panel')), 'falta alguna');
+
+  reloj.salto = 0; // segunda pasada, ya con tiempo
+  ctx2.__api.crearMesesRestantes();
+  comprobar('la segunda pasada termina los meses', creados() === 12, creados() + '/12');
+}
+
 /* --------------------------- Coste de la API --------------------------- */
 // Apps Script aborta la ejecucion a los 6 minutos y cada llamada a Sheets es
 // un viaje al servidor, asi que el numero de operaciones decide si

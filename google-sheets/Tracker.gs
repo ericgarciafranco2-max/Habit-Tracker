@@ -44,6 +44,26 @@ const HOJA_METODOS = 'Metodos';
 const HOJA_FRASES = 'Frases';
 const HOJA_DATOS = '_datos';
 
+/** Momento en que arrancó esta ejecución, para no pasarse del limite. */
+const ARRANQUE = Date.now();
+/** Apps Script corta a los 6 minutos; paramos antes y con margen. */
+const LIMITE_MS = 4.5 * 60 * 1000;
+
+function quedaTiempo() {
+  return Date.now() - ARRANQUE < LIMITE_MS;
+}
+
+/** Numero de columna a letra: B, AA, AH... */
+function letraColumna(n) {
+  let s = '';
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
 /** Fila donde empieza la tabla de hábitos en Ajustes. */
 const FILA_HABITOS = 12;
 /** Fila donde empieza la rejilla de hábitos en cada mes. */
@@ -127,6 +147,7 @@ function onOpen() {
   ui.createMenu('⚡ Habit Tracker')
     .addItem('Crear / rehacer el tracker', 'crearTracker')
     .addSeparator()
+    .addItem('Crear los meses que faltan', 'crearMesesRestantes')
     .addItem('Preparar el dia de hoy', 'prepararHoy')
     .addItem('Recalcular todo', 'recalcularTodo')
     .addSeparator()
@@ -172,7 +193,10 @@ function crearTracker() {
 
   construirDatos(ss, año);
   construirAjustes(ss, año);
-  for (let m = 0; m < 12; m++) construirMes(ss, m, año);
+  // Solo el mes en curso: con el ya puedes empezar hoy. Los otros once se
+  // construyen despues, y si no caben en esta ejecucion se terminan en la
+  // siguiente. Asi ninguna pasada se acerca al limite de seis minutos.
+  construirMes(ss, new Date().getMonth(), año);
   construirHoy(ss);
   construirPanel(ss);
   construirUniversidad(ss);
@@ -182,9 +206,11 @@ function crearTracker() {
   limpiarSobrantes(ss);
   ordenarPestañas(ss);
 
-  aplicarValidaciones(ss, leerHabitos(), año);
+  aplicarValidaciones(ss, leerHabitos(), año, new Date().getMonth());
   recalcularTodo();
   prepararHoy();
+
+  const faltan = crearMesesQueFaltan();
 
   ss.setActiveSheet(ss.getSheetByName(HOJA_HOY));
   avisar(
@@ -192,7 +218,38 @@ function crearTracker() {
     'Tu tracker esta montado.\n\n' +
       '1. Repasa la pestaña Ajustes: tus habitos, tus horarios y el email de tu auditor.\n' +
       '2. Marca cada dia en la pestaña Hoy.\n' +
-      '3. Menu ⚡ Habit Tracker > Activar avisos automaticos, para el correo de cada mañana y el informe de los domingos.',
+      '3. Menu ⚡ Habit Tracker > Activar avisos automaticos, para el correo de cada mañana y el informe de los domingos.' +
+      (faltan
+        ? '\n\nQuedan ' + faltan + ' meses por crear. Vuelve a ejecutar ⚡ Habit Tracker > Crear los meses que faltan. ' +
+          'No corre prisa: puedes empezar a usarlo ya.'
+        : ''),
+  );
+}
+
+/**
+ * Construye los meses que aun no existen, parando con margen antes del limite
+ * de ejecucion. Devuelve cuantos quedan; si devuelve cero, ya estan todos.
+ */
+function crearMesesQueFaltan() {
+  const ss = SpreadsheetApp.getActive();
+  const año = Number(leerConfig('Año')) || new Date().getFullYear();
+  let faltan = 0;
+  for (let m = 0; m < 12; m++) {
+    if (ss.getSheetByName(MESES[m])) continue;
+    if (!quedaTiempo()) { faltan++; continue; }
+    construirMes(ss, m, año);
+  }
+  if (!faltan) ordenarPestañas(ss);
+  return faltan;
+}
+
+function crearMesesRestantes() {
+  const faltan = crearMesesQueFaltan();
+  avisar(
+    faltan ? 'Aun quedan meses' : 'Todos los meses creados',
+    faltan
+      ? 'Quedan ' + faltan + ' por crear. Vuelve a ejecutar esta misma opcion.'
+      : 'Ya estan los doce meses del año.',
   );
 }
 
@@ -209,7 +266,7 @@ function hojaLimpia(ss, nombre) {
     // arrastra la estructura de la vez anterior.
     h.setFrozenRows(0);
     h.setFrozenColumns(0);
-    h.getRange(1, 1, Math.min(h.getMaxRows(), 300), Math.min(h.getMaxColumns(), 60)).breakApart();
+    h.getRange(1, 1, Math.min(h.getMaxRows(), 120), Math.min(h.getMaxColumns(), 45)).breakApart();
     h.clearConditionalFormatRules();
     const dibujos = h.getCharts();
     for (let i = 0; i < dibujos.length; i++) h.removeChart(dibujos[i]);
@@ -336,6 +393,29 @@ function construirMes(ss, mes, año) {
   const resumen = ['Hechos', 'Exigibles', '%', 'Racha'];
   cabecera(h, 3, dias + 2, resumen);
 
+  // Columnas de apoyo ocultas con el objetivo, el minimo y el calendario de
+  // cada habito, traidos de Ajustes. Existen para que el formato condicional
+  // pueda referirse a ellos con una referencia normal: la version anterior
+  // usaba INDIRECT, que es volatil, y obligaba a la hoja a reevaluar cientos
+  // de miles de celdas continuamente. Eso, y no el numero de llamadas, es lo
+  // que agotaba los seis minutos de Apps Script.
+  const apoyo = dias + 6;
+  cabecera(h, 3, apoyo, ['Objetivo', 'Minimo', 'Cuando']);
+  const desfaseAjustes = FILA_HABITOS + 1 - FILA_REJILLA;
+  const objetivos = [];
+  const minimos = [];
+  const cuandos = [];
+  for (let i = 0; i < MAX_HABITOS; i++) {
+    const filaAjustes = FILA_REJILLA + i + desfaseAjustes;
+    objetivos.push(['=' + HOJA_AJUSTES + '!$F$' + filaAjustes]);
+    minimos.push(['=' + HOJA_AJUSTES + '!$G$' + filaAjustes]);
+    cuandos.push(['=' + HOJA_AJUSTES + '!$I$' + filaAjustes]);
+  }
+  h.getRange(FILA_REJILLA, apoyo, MAX_HABITOS, 1).setFormulas(objetivos);
+  h.getRange(FILA_REJILLA, apoyo + 1, MAX_HABITOS, 1).setFormulas(minimos);
+  h.getRange(FILA_REJILLA, apoyo + 2, MAX_HABITOS, 1).setFormulas(cuandos);
+  h.hideColumns(apoyo, 3);
+
   h.getRange(FILA_REJILLA, 1, MAX_HABITOS, 1)
     .setFormulaR1C1('=IF(' + HOJA_AJUSTES + '!R[' + (FILA_HABITOS + 1 - FILA_REJILLA) + ']C2="","",' +
       HOJA_AJUSTES + '!R[' + (FILA_HABITOS + 1 - FILA_REJILLA) + ']C1&" "&' +
@@ -354,16 +434,18 @@ function construirMes(ss, mes, año) {
 
 /**
  * El color de cada casilla sale de su valor comparado con el objetivo y el
- * minimo DE SU FILA: cada fila de la rejilla mira su propio habito en Ajustes
- * (fila 4 de la rejilla = fila 13 de Ajustes, de ahi el desfase de 9). Con una
- * referencia fija, todas las filas se pintarian contra el primer habito.
+ * minimo DE SU FILA, leidos de las columnas de apoyo ocultas de esta misma
+ * pestaña. Antes se leian con INDIRECT desde Ajustes: funcionaba, pero
+ * INDIRECT es volatil y con doce rejillas eran mas de cien mil celdas
+ * reevaluandose sin parar, hasta agotar el limite de ejecucion.
  */
 function formatoRejilla(hoja, dias, mes, año) {
   const rango = hoja.getRange(FILA_REJILLA, 2, MAX_HABITOS, dias);
-  const desfase = FILA_HABITOS + 1 - FILA_REJILLA;
-  const obj = 'INDIRECT("' + HOJA_AJUSTES + '!$F$"&(ROW()+' + desfase + '))';
-  const min = 'INDIRECT("' + HOJA_AJUSTES + '!$G$"&(ROW()+' + desfase + '))';
-  const cuando = 'INDIRECT("' + HOJA_AJUSTES + '!$I$"&(ROW()+' + desfase + '))';
+  const apoyo = letraColumna(dias + 6);
+  const obj = '$' + apoyo + FILA_REJILLA;
+  const min = '$' + letraColumna(dias + 7) + FILA_REJILLA;
+  const cuando = '$' + letraColumna(dias + 8) + FILA_REJILLA;
+
   // Solo pintamos de rojo el hueco de un dia que ya paso y en el que ese
   // habito era exigible. Los de cuota semanal no exigen un dia concreto, asi
   // que se quedan sin pintar en vez de acusarte de algo que no fallaste.
@@ -396,9 +478,10 @@ function formatoRejilla(hoja, dias, mes, año) {
  * demas. Se aplica de una tacada por mes: poner la validacion celda a celda
  * en doce meses es lo que hace que estas plantillas tarden un minuto en abrir.
  */
-function aplicarValidaciones(ss, habitos, año) {
+function aplicarValidaciones(ss, habitos, año, soloMes) {
   const casilla = SpreadsheetApp.newDataValidation().requireCheckbox().build();
   for (let m = 0; m < 12; m++) {
+    if (soloMes !== undefined && m !== soloMes) continue;
     const hoja = ss.getSheetByName(MESES[m]);
     if (!hoja) continue;
     const dias = new Date(año, m + 1, 0).getDate();
