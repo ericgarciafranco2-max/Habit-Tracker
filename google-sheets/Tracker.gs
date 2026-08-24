@@ -168,6 +168,49 @@ function onOpen() {
 /* Construcción                                                        */
 /* ================================================================== */
 
+/**
+ * Las fases de la construccion. Cada una se marca como hecha en cuanto
+ * termina, asi que si Apps Script corta la ejecucion a los seis minutos, la
+ * siguiente sigue por donde iba en vez de empezar de cero.
+ */
+const FASES = [
+  'datos', 'ajustes', 'mes-actual', 'hoy', 'panel',
+  'universidad', 'presion', 'metodos', 'frases', 'ajuste-final',
+];
+const PROP_PROGRESO = 'PROGRESO_CONSTRUCCION';
+
+function fasesHechas() {
+  const v = PropertiesService.getScriptProperties().getProperty(PROP_PROGRESO);
+  return v ? v.split(',') : [];
+}
+
+function marcarFase(nombre) {
+  const hechas = fasesHechas();
+  if (hechas.indexOf(nombre) < 0) hechas.push(nombre);
+  PropertiesService.getScriptProperties().setProperty(PROP_PROGRESO, hechas.join(','));
+}
+
+function reiniciarProgreso() {
+  PropertiesService.getScriptProperties().setProperty(PROP_PROGRESO, '');
+}
+
+/**
+ * Quita el formato condicional de las pestañas de meses que ya existan, antes
+ * de tocar nada mas.
+ *
+ * Las versiones anteriores usaban INDIRECT en esas reglas, que es volatil: si
+ * quedan doce rejillas con esas reglas puestas, la hoja se pasa el rato
+ * recalculando cientos de miles de celdas y CADA escritura del script se queda
+ * esperando. Aunque el codigo nuevo ya no las use, las reglas viejas siguen en
+ * la hoja hasta que alguien las borra, y envenenan la ejecucion entera.
+ */
+function limpiarFormatosVolatiles(ss) {
+  for (let m = 0; m < 12; m++) {
+    const hoja = ss.getSheetByName(MESES[m]);
+    if (hoja) hoja.setConditionalFormatRules([]);
+  }
+}
+
 function crearTracker() {
   const ss = SpreadsheetApp.getActive();
   if (!ss) {
@@ -178,37 +221,59 @@ function crearTracker() {
   }
   const ui = interfaz();
   const año = new Date().getFullYear();
+  let hechas = fasesHechas();
+  const reanudando = hechas.length > 0 && hechas.length < FASES.length;
 
-  if (ss.getSheetByName(HOJA_AJUSTES) && ui) {
-    const r = ui.alert(
-      'Rehacer el tracker',
-      'Ya hay un tracker en esta hoja. Se rehara la estructura.\n\n' +
-        'Tus marcas de los meses NO se tocan, pero si has añadido pestañas propias, mejor haz una copia antes.\n\n¿Sigo?',
-      ui.ButtonSet.YES_NO,
-    );
-    if (r !== ui.Button.YES) return;
+  if (!reanudando) {
+    if (ss.getSheetByName(HOJA_AJUSTES) && ui) {
+      const r = ui.alert(
+        'Rehacer el tracker',
+        'Ya hay un tracker en esta hoja. Se rehara la estructura.\n\n' +
+          'Tus marcas de los meses NO se tocan, pero si has añadido pestañas propias, mejor haz una copia antes.\n\n¿Sigo?',
+        ui.ButtonSet.YES_NO,
+      );
+      if (r !== ui.Button.YES) return;
+    }
+    reiniciarProgreso();
+    hechas = [];
+    ss.setSpreadsheetTimeZone(ss.getSpreadsheetTimeZone() || 'Europe/Madrid');
+    limpiarFormatosVolatiles(ss);
   }
 
-  ss.setSpreadsheetTimeZone(ss.getSpreadsheetTimeZone() || 'Europe/Madrid');
+  const trabajos = {
+    'datos': function () { construirDatos(ss, año); },
+    'ajustes': function () { construirAjustes(ss, año); },
+    'mes-actual': function () { construirMes(ss, new Date().getMonth(), año); },
+    'hoy': function () { construirHoy(ss); },
+    'panel': function () { construirPanel(ss); },
+    'universidad': function () { construirUniversidad(ss); },
+    'presion': function () { construirPresion(ss); },
+    'metodos': function () { construirMetodos(ss); },
+    'frases': function () { construirFrases(ss); },
+    'ajuste-final': function () {
+      limpiarSobrantes(ss);
+      ordenarPestañas(ss);
+      aplicarValidaciones(ss, leerHabitos(), año, new Date().getMonth());
+      recalcularTodo();
+      prepararHoy();
+    },
+  };
 
-  construirDatos(ss, año);
-  construirAjustes(ss, año);
-  // Solo el mes en curso: con el ya puedes empezar hoy. Los otros once se
-  // construyen despues, y si no caben en esta ejecucion se terminan en la
-  // siguiente. Asi ninguna pasada se acerca al limite de seis minutos.
-  construirMes(ss, new Date().getMonth(), año);
-  construirHoy(ss);
-  construirPanel(ss);
-  construirUniversidad(ss);
-  construirPresion(ss);
-  construirMetodos(ss);
-  construirFrases(ss);
-  limpiarSobrantes(ss);
-  ordenarPestañas(ss);
-
-  aplicarValidaciones(ss, leerHabitos(), año, new Date().getMonth());
-  recalcularTodo();
-  prepararHoy();
+  for (let i = 0; i < FASES.length; i++) {
+    const fase = FASES[i];
+    if (fasesHechas().indexOf(fase) >= 0) continue;
+    if (!quedaTiempo()) {
+      avisar(
+        'Va por buen camino',
+        'Apps Script corta las ejecuciones a los 6 minutos, asi que se ha parado a tiempo.\n\n' +
+          'Quedan ' + (FASES.length - fasesHechas().length) + ' pasos.\n\n' +
+          'Vuelve a ejecutar "Crear / rehacer el tracker": sigue por donde iba, no empieza de cero.',
+      );
+      return;
+    }
+    trabajos[fase]();
+    marcarFase(fase);
+  }
 
   const faltan = crearMesesQueFaltan();
 

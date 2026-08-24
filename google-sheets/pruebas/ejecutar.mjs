@@ -158,37 +158,46 @@ try {
 }
 
 
-/* ------------------ Construccion por partes (sin tiempo) ---------------- */
-// Si Apps Script se queda sin tiempo, crearTracker tiene que dejar la hoja
-// usable y decir cuantos meses faltan, no morir a medias. Se comprueba con un
-// reloj falso que adelanta seis minutos.
+/* ------------------ Construccion reanudable ---------------------------- */
+// Apps Script corta a los seis minutos. La construccion tiene que pararse a
+// tiempo, recordar por donde iba y terminar en la siguiente pasada, en vez de
+// morir a medias o empezar de cero. Se comprueba con un reloj que "adelanta"
+// seis minutos a partir de la llamada que se le diga.
 {
   const mod = await import('./simulador-sheets.mjs?aislado=1');
-  const reloj = { salto: 0 };
+  const reloj = { llamadas: 0, corteEn: Infinity };
   class RelojFalso extends Date {
-    static now() { return Date.now() + reloj.salto; }
+    static now() {
+      reloj.llamadas++;
+      return Date.now() + (reloj.llamadas > reloj.corteEn ? 6 * 60 * 1000 : 0);
+    }
   }
   const ctx2 = vm.createContext({
     ...mod.entorno, Date: RelojFalso, Math, Object, String, Number, Array, JSON, RegExp, isNaN,
   });
-  vm.runInContext(codigo + '\n;globalThis.__api = { crearTracker, crearMesesRestantes };', ctx2);
-
-  reloj.salto = 6 * 60 * 1000; // se acabo el tiempo nada mas empezar
-  ctx2.__api.crearTracker();
+  vm.runInContext(codigo + '\n;globalThis.__api = { crearTracker, fasesHechas };', ctx2);
 
   const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
   const creados = () => meses.filter((m) => mod.libro.getSheetByName(m)).length;
 
-  comprobar('sin tiempo, deja la hoja usable con el mes en curso', creados() === 1,
-    creados() + ' meses creados');
-  comprobar('sin tiempo, avisa de cuantos meses faltan',
-    mod.alertas.join(' ').indexOf('Quedan 11 meses') > 0, mod.alertas[mod.alertas.length - 1]);
-  comprobar('sin tiempo, la pestaña Hoy si esta',
-    Boolean(mod.libro.getSheetByName('Hoy')) && Boolean(mod.libro.getSheetByName('Panel')), 'falta alguna');
+  // Primera pasada: se queda sin tiempo despues de cuatro fases.
+  reloj.corteEn = 5;
+  ctx2.__api.crearTracker();
+  const trasCorte = ctx2.__api.fasesHechas().length;
+  comprobar('se para a tiempo en vez de morir a los 6 minutos',
+    trasCorte > 0 && trasCorte < 10, trasCorte + ' fases hechas');
+  comprobar('avisa de cuantos pasos quedan',
+    mod.alertas.join(' ').indexOf('Quedan') > 0, mod.alertas[mod.alertas.length - 1] || 'sin aviso');
 
-  reloj.salto = 0; // segunda pasada, ya con tiempo
-  ctx2.__api.crearMesesRestantes();
-  comprobar('la segunda pasada termina los meses', creados() === 12, creados() + '/12');
+  // Segunda pasada: ya con tiempo, continua por donde iba.
+  reloj.corteEn = Infinity;
+  ctx2.__api.crearTracker();
+  comprobar('la segunda pasada termina la construccion',
+    ctx2.__api.fasesHechas().length === 10, ctx2.__api.fasesHechas().join(','));
+  comprobar('estan todas las pestañas base',
+    ['Ajustes', 'Hoy', 'Panel', 'Universidad', 'Presion', 'Metodos', 'Frases', '_datos']
+      .every((n) => mod.libro.getSheetByName(n)), 'falta alguna');
+  comprobar('y los doce meses', creados() === 12, creados() + '/12');
 }
 
 /* --------------------------- Coste de la API --------------------------- */

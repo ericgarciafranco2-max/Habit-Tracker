@@ -171,6 +171,7 @@ class Libro {
 }
 
 export const libro = new Libro();
+export const propiedades = new Map();
 export const correos = [];
 export const alertas = [];
 
@@ -221,7 +222,11 @@ export const entorno = {
   Session: { getEffectiveUser: () => ({ getEmail: () => 'yo@example.com' }) },
   Logger: { log: () => {} },
   PropertiesService: {
-    getScriptProperties: () => ({ getProperty: () => null, setProperty: () => {} }),
+    getScriptProperties: () => ({
+      getProperty: (k) => (propiedades.has(k) ? propiedades.get(k) : null),
+      setProperty: (k, v) => { propiedades.set(k, String(v)); },
+      deleteProperty: (k) => { propiedades.delete(k); },
+    }),
   },
   Utilities: { formatDate: (d) => d.toISOString() },
   console,

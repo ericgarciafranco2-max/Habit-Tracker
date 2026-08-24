@@ -21,10 +21,12 @@ mismas frases.
    - Google pedira permisos: *Revisar permisos* → tu cuenta → *Configuracion
      avanzada* → *Ir a (proyecto)* → *Permitir*. El aviso de "aplicacion no
      verificada" sale porque el script es tuyo y no esta en ninguna tienda.
-   - Construye lo esencial y el mes en curso, y luego los demas meses mientras
-     le quede tiempo. Si al terminar te dice que quedan meses por crear, usa
-     **⚡ Habit Tracker → Crear los meses que faltan** las veces que haga
-     falta. Puedes empezar a usarlo sin esperar a que esten los doce.
+   - **Si te dice "Va por buen camino", vuelve a ejecutar la misma opcion.**
+     Apps Script corta las ejecuciones a los seis minutos, asi que la
+     construccion se para a tiempo, apunta por donde iba y continua en la
+     siguiente pasada. Puede hacer falta ejecutarla dos o tres veces.
+   - Si al final te dice que quedan meses, usa **⚡ Habit Tracker → Crear los
+     meses que faltan**. Puedes empezar a usarlo sin esperar a que esten los doce.
 6. **⚡ Habit Tracker → Activar avisos automaticos**.
 
 Ya esta. En el movil, instala Google Sheets y ancla la hoja a la pantalla de
@@ -99,9 +101,14 @@ INDIRECT desde Ajustes: correcto, pero INDIRECT es volatil, y con doce
 rejillas eran mas de cien mil celdas reevaluandose sin parar. La hoja se
 arrastraba y la construccion agotaba los seis minutos de Apps Script.
 
-**La construccion se puede reanudar.** Si se acaba el tiempo, deja la hoja
-usable (lo esencial y el mes en curso) y te dice cuantos meses faltan, en vez
-de morir a medias.
+**La construccion se puede reanudar.** Va por fases y apunta cada una en
+cuanto termina. Si se acaba el tiempo, se para, te lo dice y la siguiente
+ejecucion sigue por donde iba en vez de empezar de cero.
+
+**Y limpia los formatos volatiles antes de nada.** Las reglas viejas que
+quedaran de una version anterior siguen en la hoja aunque el codigo nuevo ya
+no las use, y bastan para envenenar la ejecucion entera: cada escritura del
+script se queda esperando a que la hoja recalcule.
 
 **La liquidacion es idempotente.** Deja una marca en la pestaña oculta
 `_datos`, asi que abrir la hoja tres veces no te cobra tres veces la misma
