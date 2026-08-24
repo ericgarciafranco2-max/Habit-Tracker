@@ -182,6 +182,7 @@ function crearTracker() {
   limpiarSobrantes(ss);
   ordenarPestañas(ss);
 
+  aplicarValidaciones(ss, leerHabitos(), año);
   recalcularTodo();
   prepararHoy();
 
@@ -197,36 +198,35 @@ function crearTracker() {
 
 function hojaLimpia(ss, nombre) {
   let h = ss.getSheetByName(nombre);
-  if (!h) h = ss.insertSheet(nombre);
-  h.clear();
-  // clear() no deshace fusiones ni descongela: sin esto, rehacer el tracker
-  // arrastra la estructura de la vez anterior.
-  h.setFrozenRows(0);
-  h.setFrozenColumns(0);
-  h.getRange(1, 1, h.getMaxRows(), h.getMaxColumns()).breakApart();
-  h.clearConditionalFormatRules();
-  const dibujos = h.getCharts();
-  for (let i = 0; i < dibujos.length; i++) h.removeChart(dibujos[i]);
+  const nueva = !h;
+  if (nueva) h = ss.insertSheet(nombre);
+
+  if (!nueva) {
+    // Una pestaña recien creada no tiene nada que limpiar; hacerlo igualmente
+    // en veinte pestañas es tiempo tirado del limite de seis minutos.
+    h.clear();
+    // clear() no deshace fusiones ni descongela: sin esto, rehacer el tracker
+    // arrastra la estructura de la vez anterior.
+    h.setFrozenRows(0);
+    h.setFrozenColumns(0);
+    h.getRange(1, 1, Math.min(h.getMaxRows(), 300), Math.min(h.getMaxColumns(), 60)).breakApart();
+    h.clearConditionalFormatRules();
+    const dibujos = h.getCharts();
+    for (let i = 0; i < dibujos.length; i++) h.removeChart(dibujos[i]);
+  }
   h.setHiddenGridlines(true);
   return h;
 }
 
 function titulo(hoja, texto, subtitulo, ancho) {
-  hoja.getRange(1, 1).setValue(texto)
-    .setFontSize(20).setFontWeight('bold').setFontColor(C.tinta);
-  if (subtitulo) {
-    hoja.getRange(2, 1).setValue(subtitulo).setFontSize(11).setFontColor(C.suave);
-  }
-  hoja.getRange(1, 1, 2, Math.max(1, ancho || 8)).setBackground(C.blanco);
+  hoja.getRange(1, 1).setValue(texto).setFontSize(20).setFontWeight('bold');
+  if (subtitulo) hoja.getRange(2, 1).setValue(subtitulo).setFontColor(C.suave);
   hoja.setFrozenRows(2);
 }
 
 function cabecera(hoja, fila, columna, valores) {
   const r = hoja.getRange(fila, columna, 1, valores.length);
-  r.setValues([valores])
-    .setFontWeight('bold').setFontSize(10).setFontColor(C.suave)
-    .setBackground(C.fondo)
-    .setBorder(null, null, true, null, null, null, C.linea, SpreadsheetApp.BorderStyle.SOLID);
+  r.setValues([valores]).setFontWeight('bold').setFontColor(C.suave).setBackground(C.fondo);
   return r;
 }
 
@@ -274,8 +274,8 @@ function construirAjustes(ss, año) {
 
   h.setColumnWidth(1, 50);
   h.setColumnWidth(2, 210);
+  h.setColumnWidths(3, 11, 95);
   h.setColumnWidth(14, 280);
-  for (let c = 3; c <= 13; c++) h.setColumnWidth(c, 95);
   h.setFrozenColumns(2);
 
   nota(h, FILA_HABITOS + filas + 2,
@@ -322,11 +322,16 @@ function construirMes(ss, mes, año) {
   h.getRange(2, 2, 1, dias).setValues([numeros])
     .setFontSize(9).setFontColor(C.suave).setHorizontalAlignment('center').setFontWeight('bold');
 
-  // Fines de semana en gris para orientarse de un vistazo.
+  // Fines de semana en gris para orientarse de un vistazo. En una sola
+  // escritura: una por dia eran mas de cien viajes al servidor.
+  const fondos = [[], []];
   for (let d = 1; d <= dias; d++) {
     const wd = new Date(año, mes, d).getDay();
-    if (wd === 0 || wd === 6) h.getRange(2, d + 1, 2, 1).setBackground(C.fondo);
+    const color = wd === 0 || wd === 6 ? C.fondo : C.blanco;
+    fondos[0].push(color);
+    fondos[1].push(color);
   }
+  h.getRange(2, 2, 2, dias).setBackgrounds(fondos);
 
   const resumen = ['Hechos', 'Exigibles', '%', 'Racha'];
   cabecera(h, 3, dias + 2, resumen);
@@ -338,8 +343,8 @@ function construirMes(ss, mes, año) {
   h.getRange(FILA_REJILLA, 1, MAX_HABITOS, 1).setFontSize(11);
 
   h.setColumnWidth(1, 200);
-  for (let d = 1; d <= dias; d++) h.setColumnWidth(d + 1, 30);
-  for (let i = 0; i < resumen.length; i++) h.setColumnWidth(dias + 2 + i, 72);
+  h.setColumnWidths(2, dias, 30);
+  h.setColumnWidths(dias + 2, resumen.length, 72);
   h.setFrozenColumns(1);
   h.setFrozenRows(3);
 
@@ -458,35 +463,44 @@ function prepararHoy() {
 
   const datos = leerAño(ss, año);
   const aplican = habitos.filter(function (x) { return aplicaHoy(x, hoy); });
-  let fila = 11;
 
+  // Todo el bloque de habitos se escribe de una vez. Celda a celda eran unos
+  // veinte viajes al servidor por habito, y el limite de Apps Script son seis
+  // minutos para toda la construccion.
+  const casilla = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+  // Una sola lectura de la columna de hoy en vez de una por habito.
+  const columnaHoy = mes ? mes.getRange(FILA_REJILLA, dia + 1, MAX_HABITOS, 1).getValues() : null;
+  const valores = [];
+  const pesos = [];
+  const validaciones = [];
   for (let i = 0; i < aplican.length; i++) {
     const hab = aplican[i];
-    const valor = mes ? mes.getRange(FILA_REJILLA + hab.indice, dia + 1).getValue() : '';
+    const valor = columnaHoy ? columnaHoy[hab.indice][0] : '';
+    const esCasilla = hab.medida === 'Si/No';
     const racha = calcularRacha(datos, hab, hoy, año);
+    valores.push([
+      hab.icono + '  ' + hab.nombre,
+      esCasilla ? valor === true || valor === 1 : (typeof valor === 'number' ? valor : ''),
+      textoObjetivo(hab),
+      racha > 0 ? '🔥 ' + racha : '',
+      hab.innegociable ? 'Innegociable' : '',
+      hojaMes,
+      FILA_REJILLA + hab.indice,
+      dia + 1,
+    ]);
+    pesos.push([hab.innegociable ? 'bold' : 'normal']);
+    validaciones.push([esCasilla ? casilla : null]);
+  }
 
-    h.getRange(fila, 1).setValue(hab.icono + '  ' + hab.nombre).setFontSize(12)
-      .setFontWeight(hab.innegociable ? 'bold' : 'normal');
-    h.getRange(fila, 3).setValue(textoObjetivo(hab)).setFontColor(C.suave).setFontSize(10);
-    h.getRange(fila, 4).setValue(racha > 0 ? '🔥 ' + racha : '').setFontColor(C.suave).setHorizontalAlignment('center');
-    h.getRange(fila, 5).setValue(hab.innegociable ? 'Innegociable' : '')
-      .setFontColor(hab.innegociable ? C.malo : C.suave).setFontSize(10);
-
-    const celda = h.getRange(fila, 2);
-    if (hab.medida === 'Si/No') {
-      celda.setDataValidation(SpreadsheetApp.newDataValidation().requireCheckbox().build());
-      celda.setValue(valor === true || valor === 1);
-    } else {
-      celda.setDataValidation(null);
-      celda.setValue(typeof valor === 'number' ? valor : '');
-      celda.setNumberFormat('0');
-    }
-    celda.setHorizontalAlignment('center').setBackground(C.fondo);
-
-    h.getRange(fila, 6).setValue(hojaMes);
-    h.getRange(fila, 7).setValue(FILA_REJILLA + hab.indice);
-    h.getRange(fila, 8).setValue(dia + 1);
-    fila++;
+  let fila = 11;
+  if (valores.length) {
+    h.getRange(11, 1, valores.length, 8).setValues(valores);
+    h.getRange(11, 1, valores.length, 1).setFontWeights(pesos).setFontSize(12);
+    h.getRange(11, 2, valores.length, 1)
+      .setDataValidations(validaciones).setHorizontalAlignment('center').setBackground(C.fondo);
+    h.getRange(11, 3, valores.length, 3).setFontColor(C.suave).setFontSize(10);
+    h.getRange(11, 4, valores.length, 1).setHorizontalAlignment('center');
+    fila = 11 + valores.length;
   }
 
   bloqueCierre(h, fila + 1, datos, habitos, hoy, año);
@@ -844,7 +858,7 @@ function construirPanel(ss) {
     .setFontSize(10).setFontColor(C.suave).setFontWeight('bold');
   h.getRange(5, 1, 1, kpis.length).setFontSize(24).setFontWeight('bold').setFontColor(C.tinta);
   h.getRange(4, 1, 2, kpis.length).setBackground(C.fondo);
-  for (let i = 1; i <= kpis.length; i++) h.setColumnWidth(i, 140);
+  h.setColumnWidths(1, kpis.length, 140);
 
   h.getRange(8, 1).setValue('POR HABITO — este mes')
     .setFontWeight('bold').setFontColor(C.suave).setFontSize(10);
@@ -923,7 +937,6 @@ function recalcularTodo() {
     hoja.getRange(FILA_REJILLA, diasMes + 2, MAX_HABITOS, 4).setValues(filas);
   }
 
-  aplicarValidaciones(ss, habitos, año);
   panelAlDia(ss, habitos, datos, hoy, año);
 }
 
@@ -1013,24 +1026,29 @@ function construirUniversidad(ss) {
   h.getRange(17, 1).setValue('EXAMENES').setFontWeight('bold').setFontColor(C.suave).setFontSize(10);
   cabecera(h, 18, 1, ['Asignatura', 'Examen', 'Fecha', 'Dias que faltan', 'Peso %',
     'Horas que necesito', 'Horas hechas', 'Preparacion', 'Nota']);
+  const diasQueFaltan = [];
+  const horasHechas = [];
+  const preparacion = [];
   for (let i = 0; i < 20; i++) {
     const f = 19 + i;
-    h.getRange(f, 4).setFormula('=IF(C' + f + '="","",C' + f + '-TODAY())');
+    diasQueFaltan.push(['=IF(C' + f + '="","",C' + f + '-TODAY())']);
     // Las horas hechas salen solas del registro de estudio de mas abajo.
-    h.getRange(f, 7).setFormula(
-      '=IF(A' + f + '="","",ROUND(SUMIF($A$60:$A$260,A' + f + ',$C$60:$C$260)/60,1))');
-    h.getRange(f, 8).setFormula(
-      '=IF(OR(A' + f + '="",F' + f + '=""),"",MIN(1,G' + f + '/F' + f + '))');
+    horasHechas.push(['=IF(A' + f + '="","",ROUND(SUMIF($A$60:$A$260,A' + f + ',$C$60:$C$260)/60,1))']);
+    preparacion.push(['=IF(OR(A' + f + '="",F' + f + '=""),"",MIN(1,G' + f + '/F' + f + '))']);
   }
+  h.getRange(19, 4, 20, 1).setFormulas(diasQueFaltan);
+  h.getRange(19, 7, 20, 1).setFormulas(horasHechas);
+  h.getRange(19, 8, 20, 1).setFormulas(preparacion);
   h.getRange(19, 8, 20, 1).setNumberFormat('0%');
   h.getRange(19, 3, 20, 1).setNumberFormat('dd/mm/yyyy');
 
   h.getRange(40, 1).setValue('ENTREGAS').setFontWeight('bold').setFontColor(C.suave).setFontSize(10);
   cabecera(h, 41, 1, ['Asignatura', 'Entrega', 'Fecha limite', 'Dias que faltan', 'Horas', 'Hecha']);
+  const diasEntrega = [];
   for (let i = 0; i < 12; i++) {
-    const f = 42 + i;
-    h.getRange(f, 4).setFormula('=IF(C' + f + '="","",C' + f + '-TODAY())');
+    diasEntrega.push(['=IF(C' + (42 + i) + '="","",C' + (42 + i) + '-TODAY())']);
   }
+  h.getRange(42, 4, 12, 1).setFormulas(diasEntrega);
   h.getRange(42, 6, 12, 1).insertCheckboxes();
   h.getRange(42, 3, 12, 1).setNumberFormat('dd/mm/yyyy');
 

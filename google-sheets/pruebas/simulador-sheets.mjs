@@ -5,6 +5,21 @@
  * comprobamos que la logica del script no depende de que una formula haya
  * calculado antes.
  */
+/**
+ * Cada llamada a la API de Sheets es un viaje al servidor. Apps Script corta
+ * la ejecucion a los 6 minutos, asi que lo que hay que vigilar no es el tiempo
+ * de CPU sino cuantas operaciones se piden. Aqui se cuentan todas.
+ */
+export const contador = { total: 0, por: {} };
+export function contar(nombre) {
+  contador.total++;
+  contador.por[nombre] = (contador.por[nombre] || 0) + 1;
+}
+export function reiniciarContador() {
+  contador.total = 0;
+  contador.por = {};
+}
+
 const noop = function () { return this; };
 
 class Rango {
@@ -46,7 +61,13 @@ class Rango {
     this.hoja.formulas.push({ fila: this.fila, col: this.col, f });
     return this;
   }
-  setFormulas(m) { m.forEach((fila) => fila.forEach((f) => this.setFormula(f))); return this; }
+  setFormulas(m) {
+    m.forEach((fila, r) => fila.forEach((f, c) => {
+      if (typeof f !== 'string' || f[0] !== '=') throw new Error('formula rara: ' + f);
+      this.hoja.formulas.push({ fila: this.fila + r, col: this.col + c, f });
+    }));
+    return this;
+  }
   setFormulaR1C1(f) { return this.setFormula(f); }
   setDataValidation() { return this; }
   setDataValidations(m) {
@@ -78,9 +99,17 @@ class Rango {
   }
   breakApart() { this.hoja.fusiones = []; return this; }
 }
-['setFontSize','setFontWeight','setFontColor','setBackground','setBorder','setNumberFormat',
- 'setHorizontalAlignment','setVerticalAlignment','setWrap','clearDataValidations','setFontLine',
- 'setNote','clearFormat'].forEach((m) => { Rango.prototype[m] = noop; });
+['setFontSize','setFontWeight','setFontWeights','setFontColor','setFontColors','setBackground','setBackgrounds','setBorder',
+ 'setNumberFormat','setHorizontalAlignment','setVerticalAlignment','setWrap','clearDataValidations',
+ 'setFontLine','setNote','clearFormat'].forEach((m) => {
+  Rango.prototype[m] = function () { contar('rango.' + m); return this; };
+});
+['setValue','setValues','getValue','getValues','setFormula','setFormulas','setFormulaR1C1',
+ 'setDataValidation','setDataValidations','insertCheckboxes','clearContent','merge','breakApart']
+  .forEach((m) => {
+    const original = Rango.prototype[m];
+    Rango.prototype[m] = function (...args) { contar('rango.' + m); return original.apply(this, args); };
+  });
 
 class Hoja {
   constructor(nombre) {
@@ -116,14 +145,21 @@ class Hoja {
     return b;
   }
 }
-['clearConditionalFormatRules','removeChart','setHiddenGridlines',
- 'setColumnWidth','setRowHeight','hideColumns','insertChart','setConditionalFormatRules',
- 'autoResizeColumns','setTabColor'].forEach((m) => { Hoja.prototype[m] = noop; });
+['clearConditionalFormatRules','removeChart','setHiddenGridlines','setColumnWidth','setColumnWidths',
+ 'setRowHeight','hideColumns','insertChart','setConditionalFormatRules','autoResizeColumns',
+ 'setTabColor','hideSheet'].forEach((m) => {
+  Hoja.prototype[m] = function () { contar('hoja.' + m); return this; };
+});
+// getRange() no viaja al servidor, solo describe un rango: no se cuenta.
+['clear','getLastRow','getCharts','setFrozenRows','setFrozenColumns'].forEach((m) => {
+  const original = Hoja.prototype[m];
+  Hoja.prototype[m] = function (...args) { contar('hoja.' + m); return original.apply(this, args); };
+});
 
 class Libro {
   constructor() { this.hojas = []; }
   getSheetByName(n) { return this.hojas.find((h) => h.nombre === n) || null; }
-  insertSheet(n) { const h = new Hoja(n); this.hojas.push(h); return h; }
+  insertSheet(n) { contar('libro.insertSheet'); const h = new Hoja(n); this.hojas.push(h); return h; }
   getSheets() { return this.hojas.slice(); }
   deleteSheet(h) { this.hojas = this.hojas.filter((x) => x !== h); }
   setActiveSheet(h) { this.activa = h; return h; }

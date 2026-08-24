@@ -10,7 +10,7 @@
  */
 import fs from 'node:fs';
 import vm from 'node:vm';
-import { entorno, libro, correos, alertas } from './simulador-sheets.mjs';
+import { entorno, libro, correos, alertas, contador, reiniciarContador } from './simulador-sheets.mjs';
 
 const codigo = fs.readFileSync(new URL('../Tracker.gs', import.meta.url), 'utf8');
 const ctx = vm.createContext({ ...entorno, Date, Math, Object, String, Number, Array, JSON, RegExp, isNaN });
@@ -156,6 +156,28 @@ try {
 } catch (e) {
   comprobar('rehacer el tracker sobre uno ya montado', false, e.message);
 }
+
+
+/* --------------------------- Coste de la API --------------------------- */
+// Apps Script aborta la ejecucion a los 6 minutos y cada llamada a Sheets es
+// un viaje al servidor, asi que el numero de operaciones decide si
+// crearTracker termina o se queda a medias. La primera version se pasaba de
+// tiempo con 2.432 operaciones, casi quinientas de ellas anchos de columna
+// puestos uno a uno.
+//
+// El tope no es una medida fisica: es un aviso de que alguien ha vuelto a
+// meter un bucle que escribe celda a celda. Se mide el caso peor, que es
+// rehacer el tracker sobre uno ya construido.
+const TOPE_OPERACIONES = 1200;
+reiniciarContador();
+api.crearTracker();
+comprobar('crearTracker cabe en el limite de tiempo de Apps Script',
+  contador.total <= TOPE_OPERACIONES,
+  contador.total + ' operaciones (tope ' + TOPE_OPERACIONES + ')');
+
+const top = Object.entries(contador.por).sort((a, b) => b[1] - a[1]).slice(0, 6);
+console.log('\nOperaciones de crearTracker: ' + contador.total + ' (tope ' + TOPE_OPERACIONES + ')');
+for (const [nombre, n] of top) console.log('   ' + String(n).padStart(5) + '  ' + nombre);
 
 console.log(fallos ? `\n${fallos} fallo(s)` : '\nTodo correcto.');
 process.exit(fallos ? 1 : 0);
