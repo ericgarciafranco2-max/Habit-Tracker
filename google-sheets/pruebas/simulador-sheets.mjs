@@ -59,6 +59,10 @@ class Rango {
   setFormula(f) {
     if (typeof f !== 'string' || f[0] !== '=') throw new Error('formula rara: ' + f);
     this.hoja.formulas.push({ fila: this.fila, col: this.col, f });
+    // La sonda con la que el script averigua el separador: solo "responde" la
+    // que coincide con el idioma simulado, igual que haria Sheets.
+    const sonda = f.match(/^=IF\(1=1([,;])"si"\1"no"\)$/);
+    if (sonda) this.hoja._set(this.fila, this.col, sonda[1] === config.separador ? 'si' : '#ERROR!');
     return this;
   }
   setFormulas(m) {
@@ -204,6 +208,8 @@ class Libro {
 
 export const libro = new Libro();
 export const propiedades = new Map();
+/** Idioma simulado de la hoja: que separador de argumentos acepta. */
+export const config = { separador: ',' };
 export const disparadores = [];
 export const correos = [];
 export const alertas = [];
@@ -226,6 +232,7 @@ export const entorno = {
   SpreadsheetApp: {
     getActive: () => libro,
     getActiveSpreadsheet: () => libro,
+    flush: () => {},
     newDataValidation: validador,
     newConditionalFormatRule: reglaCF,
     BorderStyle: { SOLID: 'SOLID' },

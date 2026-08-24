@@ -179,6 +179,33 @@ try {
     exigibles + ' dias exigibles el mes en que empiezas');
 }
 
+/* ------------------- Idioma de la hoja y separadores -------------------- */
+// Apps Script escribe las formulas tal cual: una hoja en español espera punto
+// y coma donde una en ingles espera coma. Con el separador equivocado TODAS
+// las formulas quedan en #ERROR!, incluidas las triviales.
+{
+  const mod = await import('./simulador-sheets.mjs?espanol=1');
+  mod.config.separador = ';';
+  const ctx3 = vm.createContext({
+    ...mod.entorno, Date, Math, Object, String, Number, Array, JSON, RegExp, isNaN,
+  });
+  vm.runInContext(codigo + '\n;globalThis.__api = { crearTracker };', ctx3);
+  ctx3.__api.crearTracker();
+
+  const todas = mod.libro.getSheets().flatMap((h) => h.formulas.map((x) => x.f));
+  const conComa = todas.filter((f) => /=(IF|AND|OR|TEXT|QUERY|ROUND|SUMIF|MIN|DATE|WEEKDAY)\(/.test(f)
+    && /\((?:[^"()]|"[^"]*")*,/.test(f));
+  comprobar('en una hoja en español las formulas usan punto y coma',
+    conComa.length === 0 && todas.length > 10,
+    conComa.length ? conComa[0].slice(0, 70) : 'solo ' + todas.length + ' formulas');
+
+  const reglas = mod.libro.getSheets().flatMap((h) => (h.reglas || []).map((r) => r.formula));
+  const reglasConComa = reglas.filter((f) => f && /\((?:[^"()]|"[^"]*")*,/.test(f));
+  comprobar('y las reglas de formato tambien',
+    reglasConComa.length === 0 && reglas.length > 0,
+    reglasConComa.length ? reglasConComa[0].slice(0, 70) : 'sin reglas');
+}
+
 /* ------------------- Nada volatil en el formato condicional ------------ */
 // Una funcion volatil (INDIRECT, TODAY, NOW, RAND, OFFSET) dentro de una regla
 // de formato se evalua en CADA casilla y se reevalua sin parar. Con doce

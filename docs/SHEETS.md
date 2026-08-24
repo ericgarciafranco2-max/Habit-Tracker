@@ -96,6 +96,13 @@ cuanto mueves una fila.
 **Los porcentajes se recalculan** al abrir la hoja, con el menu *Recalcular
 todo* y en la liquidacion de cada madrugada.
 
+**El separador de las formulas se detecta al vuelo.** Apps Script escribe las
+formulas tal cual, y una hoja en español espera punto y coma donde una en
+ingles espera coma. Con el separador equivocado no falla una formula: fallan
+TODAS, incluidas las triviales, y la hoja se llena de #ERROR!. Antes de
+escribir nada, el script prueba las dos variantes en una pestaña temporal y usa
+la que su hoja acepta, sea cual sea el idioma.
+
 **Nada de formulas volatiles en el formato condicional.** Los colores de la
 rejilla comparan cada casilla con el objetivo y el minimo de su fila, que
 viajan a unas columnas ocultas de cada mes. La primera version los leia con
@@ -140,6 +147,7 @@ dias crecia usando la ultima fila de toda la hoja en vez de la de su bloque.
 | --- | --- |
 | No aparece el menu ⚡ | Recarga la hoja. El menu se crea al abrirla, no al pegar el codigo |
 | "Se necesita autorizacion" | Ejecuta cualquier opcion del menu y acepta los permisos |
+| Todo sale #ERROR! | Version antigua del script: vuelve a pegar la actual |
 | Los porcentajes no cambian | Menu → *Recalcular todo* |
 | No llegan los correos | Menu → *Activar avisos automaticos*, y revisa el email en Ajustes |
 | Añado un habito y no sale en Hoy | Menu → *Preparar el dia de hoy* |

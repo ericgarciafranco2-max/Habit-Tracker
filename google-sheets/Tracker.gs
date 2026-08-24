@@ -53,6 +53,35 @@ const ARRANQUE = Date.now();
  */
 const LIMITE_MS = 3 * 60 * 1000;
 
+/**
+ * Separador de argumentos de las formulas.
+ *
+ * Apps Script escribe las formulas tal cual, y una hoja en español espera
+ * punto y coma donde una en ingles espera coma. Con el separador equivocado
+ * TODAS las formulas quedan en #ERROR!. Se detecta probando las dos en una
+ * pestaña temporal, asi que funciona sea cual sea el idioma de la hoja.
+ */
+let SEP = ',';
+
+/** En las formulas se escribe ~ donde va el separador. */
+function form(texto) {
+  return texto.split('~').join(SEP);
+}
+
+function detectarSeparador(ss) {
+  const tmp = ss.insertSheet('_sep_' + Date.now());
+  try {
+    tmp.getRange(1, 1).setFormula('=IF(1=1,"si","no")');
+    tmp.getRange(2, 1).setFormula('=IF(1=1;"si";"no")');
+    SpreadsheetApp.flush();
+    if (tmp.getRange(1, 1).getValue() === 'si') return ',';
+    if (tmp.getRange(2, 1).getValue() === 'si') return ';';
+    return ',';
+  } finally {
+    ss.deleteSheet(tmp);
+  }
+}
+
 function quedaTiempo() {
   return Date.now() - ARRANQUE < LIMITE_MS;
 }
@@ -279,6 +308,10 @@ function crearTracker() {
   }
   const ui = interfaz();
   const año = new Date().getFullYear();
+  // Antes de escribir una sola formula: en una hoja en español el separador
+  // es el punto y coma, y con el equivocado no funciona ninguna.
+  SEP = detectarSeparador(ss);
+  Logger.log('separador de formulas: "' + SEP + '"');
   let hechas = fasesHechas();
   const reanudando = hechas.length > 0 && hechas.length < FASES.length;
 
@@ -526,15 +559,13 @@ function construirMes(ss, mes, año) {
   // formato llamaba a TODAY(), que es volatil, en las 775 casillas de cada
   // rejilla: mas de nueve mil llamadas por mes y otras tantas reevaluaciones
   // cada vez que la hoja respira.
-  h.getRange(1, apoyo + 3).setFormula(
-    '=IF(TODAY()<DATE(' + año + ',' + (mes + 1) + ',1),0,' +
-    'IF(TODAY()>DATE(' + año + ',' + (mes + 1) + ',' + dias + '),99,DAY(TODAY())))');
+  h.getRange(1, apoyo + 3).setFormula(form(
+    '=IF(TODAY()<DATE(' + año + '~' + (mes + 1) + '~1)~0~' +
+    'IF(TODAY()>DATE(' + año + '~' + (mes + 1) + '~' + dias + ')~99~DAY(TODAY())))'));
   h.hideColumns(apoyo, 4);
 
   h.getRange(FILA_REJILLA, 1, MAX_HABITOS, 1)
-    .setFormulaR1C1('=IF(' + HOJA_AJUSTES + '!R[' + (FILA_HABITOS + 1 - FILA_REJILLA) + ']C2="","",' +
-      HOJA_AJUSTES + '!R[' + (FILA_HABITOS + 1 - FILA_REJILLA) + ']C1&" "&' +
-      HOJA_AJUSTES + '!R[' + (FILA_HABITOS + 1 - FILA_REJILLA) + ']C2)');
+    .setFormulas(nombresDeHabitos());
   h.getRange(FILA_REJILLA, 1, MAX_HABITOS, 1).setFontSize(11);
 
   h.setColumnWidth(1, 200);
@@ -554,6 +585,18 @@ function construirMes(ss, mes, año) {
  * INDIRECT es volatil y con doce rejillas eran mas de cien mil celdas
  * reevaluandose sin parar, hasta agotar el limite de ejecucion.
  */
+/** Los nombres de la rejilla salen de Ajustes: cambiarlos alli los cambia en los doce meses. */
+function nombresDeHabitos() {
+  const desfase = FILA_HABITOS + 1 - FILA_REJILLA;
+  const filas = [];
+  for (let i = 0; i < MAX_HABITOS; i++) {
+    const fa = FILA_REJILLA + i + desfase;
+    filas.push([form('=IF(' + HOJA_AJUSTES + '!$B$' + fa + '=""~""~' +
+      HOJA_AJUSTES + '!$A$' + fa + '&" "&' + HOJA_AJUSTES + '!$B$' + fa + ')')]);
+  }
+  return filas;
+}
+
 function formatoRejilla(hoja, dias, mes, año) {
   const rango = hoja.getRange(FILA_REJILLA, 2, MAX_HABITOS, dias);
   const apoyo = letraColumna(dias + 6);
@@ -566,22 +609,22 @@ function formatoRejilla(hoja, dias, mes, año) {
   // que se quedan sin pintar en vez de acusarte de algo que no fallaste.
   // Una sola celda dice hasta que dia ha pasado; la regla solo la mira.
   const pasado = 'B$2<=$' + letraColumna(dias + 9) + '$1';
-  const exigible = 'OR(' + cuando + '="Todos los dias",' +
-    'AND(' + cuando + '="Lunes a viernes",WEEKDAY(DATE(' + año + ',' + (mes + 1) + ',B$2),2)<=5),' +
-    'AND(' + cuando + '="Fin de semana",WEEKDAY(DATE(' + año + ',' + (mes + 1) + ',B$2),2)>=6))';
+  const exigible = 'OR(' + cuando + '="Todos los dias"~' +
+    'AND(' + cuando + '="Lunes a viernes"~WEEKDAY(DATE(' + año + '~' + (mes + 1) + '~B$2)~2)<=5)~' +
+    'AND(' + cuando + '="Fin de semana"~WEEKDAY(DATE(' + año + '~' + (mes + 1) + '~B$2)~2)>=6))';
 
   const reglas = [
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=AND($A4<>"",B4=TRUE)')
+      .whenFormulaSatisfied(form('=AND($A4<>""~B4=TRUE)'))
       .setBackground(C.bien).setFontColor(C.bien).setRanges([rango]).build(),
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=AND($A4<>"",ISNUMBER(B4),' + obj + '>0,B4>=' + obj + ')')
+      .whenFormulaSatisfied(form('=AND($A4<>""~ISNUMBER(B4)~' + obj + '>0~B4>=' + obj + ')'))
       .setBackground(C.bien).setFontColor(C.bien).setRanges([rango]).build(),
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=AND($A4<>"",ISNUMBER(B4),B4>0,B4>=' + min + ')')
+      .whenFormulaSatisfied(form('=AND($A4<>""~ISNUMBER(B4)~B4>0~B4>=' + min + ')'))
       .setBackground(C.avisoSuave).setFontColor(C.aviso).setRanges([rango]).build(),
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=AND($A4<>"",B4="",' + pasado + ',' + exigible + ')')
+      .whenFormulaSatisfied(form('=AND($A4<>""~B4=""~' + pasado + '~' + exigible + ')'))
       .setBackground(C.maloSuave).setRanges([rango]).build(),
   ];
   hoja.setConditionalFormatRules(reglas);
@@ -617,8 +660,8 @@ function aplicarValidaciones(ss, habitos, año, soloMes) {
 function construirHoy(ss) {
   const h = hojaLimpia(ss, HOJA_HOY, 11 + MAX_HABITOS + 24, 10);
   titulo(h, 'Hoy', '', 8);
-  h.getRange(2, 1).setFormula(
-    '=TEXT(TODAY(),"dddd")&", "&DAY(TODAY())&" de "&TEXT(TODAY(),"mmmm")');
+  h.getRange(2, 1).setFormula(form(
+    '=TEXT(TODAY()~"dddd")&", "&DAY(TODAY())&" de "&TEXT(TODAY()~"mmmm")'));
 
   h.getRange(4, 1).setValue('LAS 3 DE HOY').setFontWeight('bold').setFontColor(C.suave).setFontSize(10);
   h.getRange(5, 1, 3, 1).setValues([['1.'], ['2.'], ['3.']]).setFontColor(C.suave);
@@ -1160,6 +1203,15 @@ function recalcularTodo() {
   panelAlDia(ss, habitos, datos, hoy, año, desde);
 }
 
+/** Doce bloques llenos o vacios segun el porcentaje. */
+function barraTexto(fraccion) {
+  const total = 12;
+  const llenos = Math.round(Math.max(0, Math.min(1, fraccion)) * total);
+  let s = '';
+  for (let i = 0; i < total; i++) s += i < llenos ? '█' : '░';
+  return s;
+}
+
 function buscarPorIndice(habitos, indice) {
   for (let i = 0; i < habitos.length; i++) if (habitos[i].indice === indice) return habitos[i];
   return null;
@@ -1212,19 +1264,14 @@ function panelAlDia(ss, habitos, datos, hoy, año, desde) {
     const exigibles = exigiblesDelMes(hab, mes, año, hoy, desde);
     const racha = calcularRacha(datos, hab, hoy, año, desde);
     mejorRacha = Math.max(mejorRacha, racha);
-    tabla.push([hab.icono + ' ' + hab.nombre, hechos, exigibles,
-      exigibles ? Math.min(1, hechos / exigibles) : 0, racha, '']);
+    const ratio = exigibles ? Math.min(1, hechos / exigibles) : 0;
+    // Barra de texto en vez de SPARKLINE: la sintaxis de sus arrays cambia con
+    // el idioma de la hoja, y esto se lee igual de bien y no puede fallar.
+    tabla.push([hab.icono + ' ' + hab.nombre, hechos, exigibles, ratio, racha, barraTexto(ratio)]);
   }
   h.getRange(10, 1, MAX_HABITOS, 6).clearContent();
   if (tabla.length) {
     h.getRange(10, 1, tabla.length, 6).setValues(tabla);
-    // La barra es un minigrafico nativo: se mantiene sola aunque cambien datos.
-    const barras = [];
-    for (let i = 0; i < tabla.length; i++) {
-      barras.push(['=SPARKLINE(D' + (10 + i) +
-        ',{"charttype","bar";"max",1;"color1","' + C.bien + '"})']);
-    }
-    h.getRange(10, 6, barras.length, 1).setFormulas(barras);
   }
 
   h.getRange(5, 1, 1, 5).setValues([[
@@ -1253,10 +1300,11 @@ function construirUniversidad(ss) {
   const preparacion = [];
   for (let i = 0; i < 20; i++) {
     const f = 19 + i;
-    diasQueFaltan.push(['=IF(C' + f + '="","",C' + f + '-TODAY())']);
+    diasQueFaltan.push([form('=IF(C' + f + '=""~""~C' + f + '-TODAY())')]);
     // Las horas hechas salen solas del registro de estudio de mas abajo.
-    horasHechas.push(['=IF(A' + f + '="","",ROUND(SUMIF($A$60:$A$260,A' + f + ',$C$60:$C$260)/60,1))']);
-    preparacion.push(['=IF(OR(A' + f + '="",F' + f + '=""),"",MIN(1,G' + f + '/F' + f + '))']);
+    horasHechas.push([form('=IF(A' + f + '=""~""~ROUND(SUMIF($A$60:$A$260~A' + f +
+      '~$C$60:$C$260)/60~1))')]);
+    preparacion.push([form('=IF(OR(A' + f + '=""~F' + f + '="")~""~MIN(1~G' + f + '/F' + f + '))')]);
   }
   h.getRange(19, 4, 20, 1).setFormulas(diasQueFaltan);
   h.getRange(19, 7, 20, 1).setFormulas(horasHechas);
@@ -1268,7 +1316,7 @@ function construirUniversidad(ss) {
   cabecera(h, 41, 1, ['Asignatura', 'Entrega', 'Fecha limite', 'Dias que faltan', 'Horas', 'Hecha']);
   const diasEntrega = [];
   for (let i = 0; i < 12; i++) {
-    diasEntrega.push(['=IF(C' + (42 + i) + '="","",C' + (42 + i) + '-TODAY())']);
+    diasEntrega.push([form('=IF(C' + (42 + i) + '=""~""~C' + (42 + i) + '-TODAY())')]);
   }
   h.getRange(42, 4, 12, 1).setFormulas(diasEntrega);
   h.getRange(42, 6, 12, 1).insertCheckboxes();
@@ -1287,10 +1335,10 @@ function construirUniversidad(ss) {
   const rango = h.getRange(19, 1, 20, 9);
   h.setConditionalFormatRules([
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=AND($D19<>"",$D19>=0,$D19<=7,$H19<0.6)')
+      .whenFormulaSatisfied(form('=AND($D19<>""~$D19>=0~$D19<=7~$H19<0.6)'))
       .setBackground(C.maloSuave).setRanges([rango]).build(),
     SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied('=AND($D19<>"",$D19>=0,$D19<=14)')
+      .whenFormulaSatisfied(form('=AND($D19<>""~$D19>=0~$D19<=14)'))
       .setBackground(C.avisoSuave).setRanges([rango]).build(),
   ]);
 
@@ -1338,8 +1386,8 @@ function construirPresion(ss) {
   h.getRange(40, 1).setValue('DEUDA PENDIENTE')
     .setFontWeight('bold').setFontColor(C.suave).setFontSize(10);
   cabecera(h, 41, 1, ['Fecha', 'Habito', 'Cantidad', 'Unidad', 'Motivo', 'Pagada']);
-  h.getRange(42, 1).setFormula(
-    '=IFERROR(QUERY(\'' + HOJA_DATOS + '\'!H3:M,"select * where H is not null and M is null",0),"")');
+  h.getRange(42, 1).setFormula(form(
+    '=IFERROR(QUERY(\'' + HOJA_DATOS + '\'!H3:M~"select * where H is not null and M is null"~0)~"")'));
 
   h.setColumnWidth(1, 200); h.setColumnWidth(2, 260); h.setColumnWidth(5, 300);
 
