@@ -59,14 +59,39 @@ class Rango {
       for (let c = 0; c < this.cols; c++) this.hoja._set(this.fila + r, this.col + c, '');
     return this;
   }
-  merge() { return this; }
+  merge() {
+    // Google rechaza una fusion que cruce el borde de lo inmovilizado. El
+    // error real aparece mas tarde, al vaciar el lote de escrituras, asi que
+    // en la hoja de verdad la traza señala una funcion que no tiene la culpa.
+    const fc = this.hoja.frozenCols;
+    if (fc > 0 && this.col <= fc && this.col + this.cols - 1 > fc) {
+      throw new Error(
+        `No se pueden combinar columnas inmovilizadas con columnas no inmovilizadas ` +
+        `(${this.hoja.getName()}: fusion de ${this.cols} columnas desde la ${this.col} con ${fc} inmovilizadas)`);
+    }
+    const fr = this.hoja.frozenRows;
+    if (fr > 0 && this.fila <= fr && this.fila + this.filas - 1 > fr) {
+      throw new Error(`No se pueden combinar filas inmovilizadas con filas no inmovilizadas (${this.hoja.getName()})`);
+    }
+    this.hoja.fusiones.push({ fila: this.fila, col: this.col, filas: this.filas, cols: this.cols });
+    return this;
+  }
+  breakApart() { this.hoja.fusiones = []; return this; }
 }
 ['setFontSize','setFontWeight','setFontColor','setBackground','setBorder','setNumberFormat',
  'setHorizontalAlignment','setVerticalAlignment','setWrap','clearDataValidations','setFontLine',
  'setNote','clearFormat'].forEach((m) => { Rango.prototype[m] = noop; });
 
 class Hoja {
-  constructor(nombre) { this.nombre = nombre; this.celdas = new Map(); this.formulas = []; this.oculta = false; }
+  constructor(nombre) {
+    this.nombre = nombre; this.celdas = new Map(); this.formulas = [];
+    this.oculta = false; this.frozenRows = 0; this.frozenCols = 0; this.fusiones = [];
+  }
+  setFrozenRows(n) { this.frozenRows = n; return this; }
+  setFrozenColumns(n) { this.frozenCols = n; return this; }
+  getFrozenRows() { return this.frozenRows; }
+  getFrozenColumns() { return this.frozenCols; }
+  getMaxColumns() { return 60; }
   getName() { return this.nombre; }
   _clave(f, c) { return f + ':' + c; }
   _set(f, c, v) {
@@ -91,7 +116,7 @@ class Hoja {
     return b;
   }
 }
-['clearConditionalFormatRules','removeChart','setHiddenGridlines','setFrozenRows','setFrozenColumns',
+['clearConditionalFormatRules','removeChart','setHiddenGridlines',
  'setColumnWidth','setRowHeight','hideColumns','insertChart','setConditionalFormatRules',
  'autoResizeColumns','setTabColor'].forEach((m) => { Hoja.prototype[m] = noop; });
 

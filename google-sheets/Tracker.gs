@@ -199,6 +199,11 @@ function hojaLimpia(ss, nombre) {
   let h = ss.getSheetByName(nombre);
   if (!h) h = ss.insertSheet(nombre);
   h.clear();
+  // clear() no deshace fusiones ni descongela: sin esto, rehacer el tracker
+  // arrastra la estructura de la vez anterior.
+  h.setFrozenRows(0);
+  h.setFrozenColumns(0);
+  h.getRange(1, 1, h.getMaxRows(), h.getMaxColumns()).breakApart();
   h.clearConditionalFormatRules();
   const dibujos = h.getCharts();
   for (let i = 0; i < dibujos.length; i++) h.removeChart(dibujos[i]);
@@ -286,7 +291,10 @@ function lista(hoja, fila, columna, filas, valores) {
 }
 
 function nota(hoja, fila, texto) {
-  hoja.getRange(fila, 1, 1, 8).merge()
+  // Google no deja fusionar columnas inmovilizadas con las que no lo estan,
+  // asi que la nota arranca despues de la parte congelada de cada pestaña.
+  const inicio = hoja.getFrozenColumns() + 1;
+  hoja.getRange(fila, inicio, 1, 8).merge()
     .setValue(texto).setFontSize(10).setFontColor(C.suave)
     .setWrap(true).setVerticalAlignment('top');
   hoja.setRowHeight(fila, 58);

@@ -144,5 +144,18 @@ for (const hoja of libro.getSheets()) {
 }
 comprobar('todas las formulas usan coma como separador', malas.length === 0, malas.slice(0, 3).join(' | '));
 
+/* ---------------------------- Rehacer ---------------------------------- */
+// Rehacer el tracker sobre uno ya montado tiene que funcionar: clear() no
+// deshace fusiones ni descongela filas, asi que sin limpiarlas la segunda
+// pasada hereda la estructura de la primera y falla.
+try {
+  api.crearTracker();
+  comprobar('rehacer el tracker sobre uno ya montado', true, '');
+  comprobar('tras rehacerlo siguen los habitos', api.leerHabitos().length === 10,
+    api.leerHabitos().length + ' habitos');
+} catch (e) {
+  comprobar('rehacer el tracker sobre uno ya montado', false, e.message);
+}
+
 console.log(fallos ? `\n${fallos} fallo(s)` : '\nTodo correcto.');
 process.exit(fallos ? 1 : 0);
