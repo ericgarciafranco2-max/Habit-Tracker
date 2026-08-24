@@ -21,12 +21,14 @@ mismas frases.
    - Google pedira permisos: *Revisar permisos* → tu cuenta → *Configuracion
      avanzada* → *Ir a (proyecto)* → *Permitir*. El aviso de "aplicacion no
      verificada" sale porque el script es tuyo y no esta en ninguna tienda.
-   - **Si te dice "Va por buen camino", vuelve a ejecutar la misma opcion.**
-     Apps Script corta las ejecuciones a los seis minutos, asi que la
-     construccion se para a tiempo, apunta por donde iba y continua en la
-     siguiente pasada. Puede hacer falta ejecutarla dos o tres veces.
-   - Si al final te dice que quedan meses, usa **⚡ Habit Tracker → Crear los
-     meses que faltan**. Puedes empezar a usarlo sin esperar a que esten los doce.
+   - **Si te dice "Va por buen camino", no tienes que hacer nada.** La
+     construccion completa no cabe en los seis minutos que da Apps Script, asi
+     que va por fases: se para a tiempo, apunta por donde iba y deja programada
+     una continuacion para dentro de un minuto. Termina sola en dos o tres
+     pasadas. Si no quieres esperar, **⚡ Habit Tracker → Continuar la
+     construccion**.
+   - El mes en curso se construye el primero, asi que puedes empezar a marcar
+     sin esperar a que esten los doce.
 6. **⚡ Habit Tracker → Activar avisos automaticos**.
 
 Ya esta. En el movil, instala Google Sheets y ancla la hoja a la pantalla de
@@ -101,9 +103,13 @@ INDIRECT desde Ajustes: correcto, pero INDIRECT es volatil, y con doce
 rejillas eran mas de cien mil celdas reevaluandose sin parar. La hoja se
 arrastraba y la construccion agotaba los seis minutos de Apps Script.
 
-**La construccion se puede reanudar.** Va por fases y apunta cada una en
-cuanto termina. Si se acaba el tiempo, se para, te lo dice y la siguiente
-ejecucion sigue por donde iba en vez de empezar de cero.
+**La construccion se reanuda sola.** Montar veinte pestañas con sus formatos
+no cabe en los seis minutos de Apps Script. Va por veinticuatro fases pequeñas
+y apunta cada una en cuanto termina; al quedarse sin tiempo se para y programa
+un disparador que la continua un minuto despues. El corte se comprueba entre
+fases, asi que el margen (tres minutos) tiene que ser mayor que la fase mas
+lenta: con un margen justo, una fase larga que arranca al filo se lleva por
+delante el limite.
 
 **Y limpia los formatos volatiles antes de nada.** Las reglas viejas que
 quedaran de una version anterior siguen en la hoja aunque el codigo nuevo ya
@@ -137,7 +143,7 @@ dias crecia usando la ultima fila de toda la hoja en vez de la de su bloque.
 | Los porcentajes no cambian | Menu → *Recalcular todo* |
 | No llegan los correos | Menu → *Activar avisos automaticos*, y revisa el email en Ajustes |
 | Añado un habito y no sale en Hoy | Menu → *Preparar el dia de hoy* |
-| Faltan pestañas de meses | Menu → *Crear los meses que faltan* |
+| Se quedo a medias | Menu → *Continuar la construccion* (o espera un minuto) |
 | Quiero empezar de cero | Menu → *Crear / rehacer el tracker* |
 
 Antes de nada, prueba **⚡ Habit Tracker → Comprobar que todo esta bien**: te

@@ -46,8 +46,12 @@ const HOJA_DATOS = '_datos';
 
 /** Momento en que arrancó esta ejecución, para no pasarse del limite. */
 const ARRANQUE = Date.now();
-/** Apps Script corta a los 6 minutos; paramos antes y con margen. */
-const LIMITE_MS = 4.5 * 60 * 1000;
+/**
+ * Apps Script corta a los 6 minutos. Paramos a los 3 porque el corte solo se
+ * comprueba ENTRE fases: si una fase larga arranca al filo, se lleva por
+ * delante el margen. Con 3 minutos cabe la fase mas lenta y sobra.
+ */
+const LIMITE_MS = 3 * 60 * 1000;
 
 function quedaTiempo() {
   return Date.now() - ARRANQUE < LIMITE_MS;
@@ -153,7 +157,7 @@ function onOpen() {
   ui.createMenu('⚡ Habit Tracker')
     .addItem('Crear / rehacer el tracker', 'crearTracker')
     .addSeparator()
-    .addItem('Crear los meses que faltan', 'crearMesesRestantes')
+    .addItem('Continuar la construccion', 'crearTracker')
     .addItem('Preparar el dia de hoy', 'prepararHoy')
     .addItem('Recalcular todo', 'recalcularTodo')
     .addSeparator()
@@ -179,10 +183,9 @@ function onOpen() {
  * termina, asi que si Apps Script corta la ejecucion a los seis minutos, la
  * siguiente sigue por donde iba en vez de empezar de cero.
  */
-const FASES = [
-  'datos', 'ajustes', 'mes-actual', 'hoy', 'panel',
-  'universidad', 'presion', 'metodos', 'frases', 'ajuste-final',
-];
+const FASES = ['datos', 'ajustes', 'hoy', 'panel', 'universidad', 'presion', 'metodos', 'frases']
+  .concat(MESES.map(function (m) { return 'mes-' + m; }))
+  .concat(['orden', 'validaciones', 'recalculo', 'preparar']);
 const PROP_PROGRESO = 'PROGRESO_CONSTRUCCION';
 
 function fasesHechas() {
@@ -217,6 +220,55 @@ function limpiarFormatosVolatiles(ss) {
   }
 }
 
+/**
+ * Programa una continuacion dentro de un minuto.
+ *
+ * Apps Script no puede alargar una ejecucion, pero si dejar programada la
+ * siguiente. Asi la construccion termina sola en un par de pasadas sin que
+ * tengas que estar dandole a Ejecutar.
+ */
+function programarContinuacion() {
+  borrarContinuaciones();
+  ScriptApp.newTrigger('continuarConstruccion').timeBased().after(60 * 1000).create();
+}
+
+function borrarContinuaciones() {
+  const lista = ScriptApp.getProjectTriggers();
+  for (let i = 0; i < lista.length; i++) {
+    if (lista[i].getHandlerFunction() === 'continuarConstruccion') ScriptApp.deleteTrigger(lista[i]);
+  }
+}
+
+/** La ejecuta el disparador: se limpia a si misma y sigue construyendo. */
+function continuarConstruccion() {
+  borrarContinuaciones();
+  crearTracker();
+}
+
+function trabajoDeFase(ss, año, fase) {
+  if (fase.indexOf('mes-') === 0) {
+    const mes = MESES.indexOf(fase.slice(4));
+    return function () { construirMes(ss, mes, año); };
+  }
+  const mapa = {
+    'datos': function () { construirDatos(ss, año); },
+    'ajustes': function () { construirAjustes(ss, año); },
+    'hoy': function () { construirHoy(ss); },
+    'panel': function () { construirPanel(ss); },
+    'universidad': function () { construirUniversidad(ss); },
+    'presion': function () { construirPresion(ss); },
+    'metodos': function () { construirMetodos(ss); },
+    'frases': function () { construirFrases(ss); },
+    'orden': function () { limpiarSobrantes(ss); ordenarPestañas(ss); },
+    'validaciones': function () {
+      aplicarValidaciones(ss, leerHabitos(), año, new Date().getMonth());
+    },
+    'recalculo': function () { recalcularTodo(); },
+    'preparar': function () { prepararHoy(); },
+  };
+  return mapa[fase];
+}
+
 function crearTracker() {
   const ss = SpreadsheetApp.getActive();
   if (!ss) {
@@ -246,92 +298,42 @@ function crearTracker() {
     limpiarFormatosVolatiles(ss);
   }
 
-  const trabajos = {
-    'datos': function () { construirDatos(ss, año); },
-    'ajustes': function () { construirAjustes(ss, año); },
-    'mes-actual': function () { construirMes(ss, new Date().getMonth(), año); },
-    'hoy': function () { construirHoy(ss); },
-    'panel': function () { construirPanel(ss); },
-    'universidad': function () { construirUniversidad(ss); },
-    'presion': function () { construirPresion(ss); },
-    'metodos': function () { construirMetodos(ss); },
-    'frases': function () { construirFrases(ss); },
-    'ajuste-final': function () {
-      limpiarSobrantes(ss);
-      ordenarPestañas(ss);
-      aplicarValidaciones(ss, leerHabitos(), año, new Date().getMonth());
-      recalcularTodo();
-      prepararHoy();
-    },
-  };
+  // El mes en curso primero: en cuanto esta, ya puedes empezar a marcar.
+  const mesActual = 'mes-' + MESES[new Date().getMonth()];
+  const orden = [mesActual].concat(FASES.filter(function (f) { return f !== mesActual; }));
 
-  for (let i = 0; i < FASES.length; i++) {
-    const fase = FASES[i];
+  for (let i = 0; i < orden.length; i++) {
+    const fase = orden[i];
     if (fasesHechas().indexOf(fase) >= 0) continue;
     if (!quedaTiempo()) {
+      const quedan = FASES.length - fasesHechas().length;
+      programarContinuacion();
       avisar(
         'Va por buen camino',
         'Apps Script corta las ejecuciones a los 6 minutos, asi que se ha parado a tiempo.\n\n' +
-          'Quedan ' + (FASES.length - fasesHechas().length) + ' pasos.\n\n' +
-          'Vuelve a ejecutar "Crear / rehacer el tracker": sigue por donde iba, no empieza de cero.',
+          'Quedan ' + quedan + ' pasos de ' + FASES.length + '.\n\n' +
+          'No tienes que hacer nada: seguira sola dentro de un minuto. Si prefieres no esperar, ' +
+          'vuelve a ejecutar "Crear / rehacer el tracker".',
       );
       return;
     }
-    trabajos[fase]();
+    const trabajo = trabajoDeFase(ss, año, fase);
+    if (trabajo) trabajo();
     marcarFase(fase);
   }
 
-  const faltan = crearMesesQueFaltan();
-
-  ss.setActiveSheet(ss.getSheetByName(HOJA_HOY));
+  borrarContinuaciones();
+  const hoja = ss.getSheetByName(HOJA_HOY);
+  if (hoja) ss.setActiveSheet(hoja);
   avisar(
     'Listo',
     'Tu tracker esta montado.\n\n' +
       '1. Repasa la pestaña Ajustes: tus habitos, tus horarios y el email de tu auditor.\n' +
       '2. Marca cada dia en la pestaña Hoy.\n' +
-      '3. Menu ⚡ Habit Tracker > Activar avisos automaticos, para el correo de cada mañana y el informe de los domingos.' +
-      (faltan
-        ? '\n\nQuedan ' + faltan + ' meses por crear. Vuelve a ejecutar ⚡ Habit Tracker > Crear los meses que faltan. ' +
-          'No corre prisa: puedes empezar a usarlo ya.'
-        : ''),
+      '3. Menu ⚡ Habit Tracker > Activar avisos automaticos, para el correo de cada mañana y el informe de los domingos.',
   );
 }
 
-/**
- * Construye los meses que aun no existen, parando con margen antes del limite
- * de ejecucion. Devuelve cuantos quedan; si devuelve cero, ya estan todos.
- */
-function crearMesesQueFaltan() {
-  const ss = SpreadsheetApp.getActive();
-  const año = Number(leerConfig('Año')) || new Date().getFullYear();
-  let faltan = 0;
-  for (let m = 0; m < 12; m++) {
-    if (ss.getSheetByName(MESES[m])) continue;
-    if (!quedaTiempo()) { faltan++; continue; }
-    construirMes(ss, m, año);
-  }
-  if (!faltan) ordenarPestañas(ss);
-  return faltan;
-}
-
-function crearMesesRestantes() {
-  const faltan = crearMesesQueFaltan();
-  avisar(
-    faltan ? 'Aun quedan meses' : 'Todos los meses creados',
-    faltan
-      ? 'Quedan ' + faltan + ' por crear. Vuelve a ejecutar esta misma opcion.'
-      : 'Ya estan los doce meses del año.',
-  );
-}
-
-/**
- * Deja la pestaña lista para escribir en ella.
- *
- * `filas` y `columnas` son el tamaño que necesita: una hoja de Google nace con
- * 1000 filas y 26 columnas, y aqui se escribe mas a la derecha (la rejilla de
- * un mes llega a la 40 y el panel a la 34). Escribir fuera de ese tamaño no
- * amplia la hoja: lanza "Those columns are out of bounds".
- */
 function hojaLimpia(ss, nombre, filas, columnas) {
   let h = ss.getSheetByName(nombre);
   const nueva = !h;

@@ -199,6 +199,7 @@ class Libro {
 
 export const libro = new Libro();
 export const propiedades = new Map();
+export const disparadores = [];
 export const correos = [];
 export const alertas = [];
 
@@ -235,13 +236,20 @@ export const entorno = {
   },
   Charts: { ChartType: { COLUMN: 'COLUMN', BAR: 'BAR', LINE: 'LINE' } },
   ScriptApp: {
-    getProjectTriggers: () => [],
-    deleteTrigger: () => {},
+    getProjectTriggers: () => disparadores.slice(),
+    deleteTrigger: (t) => {
+      const i = disparadores.indexOf(t);
+      if (i >= 0) disparadores.splice(i, 1);
+    },
     WeekDay: { SUNDAY: 'SUNDAY' },
-    newTrigger: () => {
+    newTrigger: (nombre) => {
       const t = {};
-      ['timeBased','atHour','everyDays','onWeekDay'].forEach((f) => { t[f] = () => t; });
-      t.create = () => ({});
+      ['timeBased','atHour','everyDays','onWeekDay','after'].forEach((f) => { t[f] = () => t; });
+      t.create = () => {
+        const creado = { getHandlerFunction: () => nombre };
+        disparadores.push(creado);
+        return creado;
+      };
       return t;
     },
   },
