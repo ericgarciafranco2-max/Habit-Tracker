@@ -128,6 +128,55 @@ comprobar('manda el informe semanal', correos.length === 2, correos.length + ' c
 comprobar('el informe lleva el porcentaje',
   correos.length > 1 && /\d+%/.test(correos[1].htmlBody), 'sin porcentaje');
 
+/* ------------------- Que llevan los dos correos ------------------------ */
+// Un porcentaje suelto no es informacion: no dice de donde sale ni que hacer
+// con el. Los dos correos tienen que llegar con el detalle por habito y con
+// la comparacion contra lo de antes.
+{
+  // Con el tracker recien montado, ayer es anterior a "Empezado el" y no
+  // cuenta. Para ver el correo completo hace falta llevar unos dias.
+  const ajustesF = libro.getSheetByName('Ajustes');
+  const inicioReal = ajustesF.getRange(12, 2).getValue();
+  const haceDiezDias = new Date();
+  haceDiezDias.setDate(haceDiezDias.getDate() - 10);
+  ajustesF.getRange(12, 2).setValue(haceDiezDias);
+  correos.length = 0;
+  api.recordatorioDiario();
+  api.informeSemanal();
+
+  const diario = correos[0].htmlBody;
+  comprobar('el correo de la mañana cierra el dia de ayer',
+    diario.indexOf('Ayer:') > 0, 'no habla de ayer');
+  comprobar('y trae la semana, los dias perfectos y el mes',
+    diario.indexOf('Ultimos 7 dias') > 0 && diario.indexOf('Dias perfectos') > 0 &&
+    diario.indexOf('Este mes') > 0, 'faltan cifras');
+  comprobar('y dice el minimo del contrato',
+    /minimo \d+%/.test(diario), 'sin umbral');
+
+  const semanal = correos[1].htmlBody;
+  comprobar('el informe trae la tabla habito por habito',
+    semanal.indexOf('Habito por habito') > 0 && semanal.indexOf('Estudio profundo') > 0,
+    'sin tabla');
+  comprobar('y compara con la semana anterior',
+    semanal.indexOf('semana pasada') > 0, 'no compara');
+  comprobar('y lleva el acumulado del mes y la mejor racha',
+    semanal.indexOf('Acumulado del mes') > 0 && semanal.indexOf('Mejor racha viva') > 0,
+    'faltan cifras');
+
+  // La prenda escrita en el contrato aparece cuando la semana no llega al
+  // minimo: de nada sirve firmarla si nadie la lee el dia que toca pagarla.
+  const presion = libro.getSheetByName('Presion');
+  presion.getRange(8, 2).setValue('20 EUR y los gasta el delante de mi');
+  correos.length = 0;
+  api.informeSemanal();
+  const roto = correos[0].htmlBody;
+  comprobar('si el contrato se incumple, el correo lleva la prenda escrita',
+    roto.indexOf('INCUMPLIDO') > 0 && roto.indexOf('20 EUR') > 0,
+    roto.indexOf('INCUMPLIDO') > 0 ? 'incumple pero no dice la prenda' : 'la semana de prueba cumple');
+  presion.getRange(8, 2).setValue('');
+  ajustesF.getRange(12, 2).setValue(inicioReal);
+}
+
 /* ----------------------- Penitencias ----------------------------------- */
 // Una penitencia ya pagada vuelve al saco. Antes se gastaba para siempre: con
 // las cinco de ejemplo, a la sexta sancion no pasaba nada y fallar volvia a

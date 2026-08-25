@@ -95,6 +95,28 @@ al saco: no se agotan.
 Es una lista, no un candado: nadie te lo impide. Escribe cosas que de verdad te
 importen o el bloqueo no significa nada.
 
+## Los dos correos
+
+**Cada mañana a las 7:00, solo para ti.** Cierra el dia de ayer y abre el de
+hoy: como quedo ayer y que te falto, tu porcentaje de los ultimos 7 dias contra
+el minimo del contrato, dias perfectos, acumulado del mes, y la lista de lo que
+toca hoy con la racha de cada habito. Los que llevan 2 fallos en 7 dias salen
+marcados en ambar — **al tercero hay penitencia** — y los que ya van por tres o
+mas, en rojo. Debajo, la deuda, la penitencia sin pagar y una frase.
+
+**Cada domingo a las 20:00, a ti y a tu auditor.** El porcentaje de la semana,
+**cuantos puntos has subido o bajado respecto a la semana pasada**, el minimo
+del contrato, dias perfectos, la mejor racha viva, y una tabla **habito por
+habito de peor a mejor** con barra, porcentaje, hechos/exigibles y racha.
+Cierra con el acumulado del mes, la deuda, y el veredicto del contrato: si esa
+semana no llega al minimo, el correo **incluye la prenda que escribiste en el
+contrato**, para que tu auditor la lea el dia que toca cobrarla.
+
+Los dos se pueden lanzar a mano desde el menu (*Enviar ahora el aviso de hoy* y
+*Enviar informe semanal*). Para ver como quedan sin gastar correos:
+`node google-sheets/pruebas/vista-correos.mjs` escribe un `correos.html` con los
+dos pintados.
+
 ## Auditoria cruzada: tu amigo y tu
 
 El unico sitio donde se pone el auditor es **`Ajustes` → `Email de tu auditor`**.

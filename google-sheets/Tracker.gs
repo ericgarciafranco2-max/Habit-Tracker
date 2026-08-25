@@ -1633,6 +1633,86 @@ function fraseDelDia() {
 /* Automatismos: aqui es donde esta version gana a la aplicacion       */
 /* ================================================================== */
 
+/* ------------------- Piezas que comparten los dos correos -------------- */
+
+/**
+ * Resumen de un periodo de `dias` que termina en `fin`.
+ *
+ * No cuenta lo anterior a "Empezado el": la primera semana no puede empezar
+ * con cinco dias de fallos de antes de que existiera el tracker.
+ */
+function resumenPeriodo(datos, habitos, fin, dias, año, castigo, desde) {
+  let hechos = 0, exigibles = 0, perfectos = 0, contados = 0;
+  const fallos = {};
+  const cursor = new Date(fin.getFullYear(), fin.getMonth(), fin.getDate());
+  for (let i = 0; i < dias; i++) {
+    if (cursor.getFullYear() === año && (!desde || cursor >= desde)) {
+      const est = estadoDelDia(datos, habitos, cursor, año, castigo);
+      hechos += est.hechos;
+      exigibles += est.exigibles;
+      if (est.exigibles) {
+        contados++;
+        if (est.hechos >= est.exigibles) perfectos++;
+      }
+      for (let j = 0; j < habitos.length; j++) {
+        const hab = habitos[j];
+        if (!aplicaHoy(hab, cursor) || esCuota(hab)) continue;
+        if (!cumplido(hab, valorDe(datos, cursor.getMonth(), cursor.getDate(), hab.indice))) {
+          fallos[hab.nombre] = (fallos[hab.nombre] || 0) + 1;
+        }
+      }
+    }
+    cursor.setDate(cursor.getDate() - 1);
+  }
+  return {
+    hechos: hechos, exigibles: exigibles, perfectos: perfectos, dias: contados,
+    ratio: exigibles ? hechos / exigibles : 0, fallos: fallos,
+  };
+}
+
+/** Porcentaje acumulado del mes en curso, sumando todos los habitos. */
+function resumenDelMes(datos, habitos, hoy, año, desde) {
+  let hechos = 0, exigibles = 0;
+  for (let i = 0; i < habitos.length; i++) {
+    hechos += hechosDelMes(datos, habitos[i], hoy.getMonth(), año, hoy, desde);
+    exigibles += exigiblesDelMes(habitos[i], hoy.getMonth(), año, hoy, desde);
+  }
+  return { hechos: hechos, exigibles: exigibles, ratio: exigibles ? hechos / exigibles : 0 };
+}
+
+const ESTILO_CORREO = 'font-family:-apple-system,Segoe UI,Roboto,Helvetica,sans-serif;' +
+  'max-width:600px;color:#1d1d1f';
+
+/** Fila de tres cifras. En tabla porque Gmail no entiende flexbox. */
+function tresCifras(celdas) {
+  let html = '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" ' +
+    'style="margin:18px 0;border-collapse:separate;border-spacing:8px 0"><tr>';
+  for (let i = 0; i < celdas.length; i++) {
+    html += '<td width="33%" style="background:#f5f5f7;border-radius:10px;padding:12px 14px">' +
+      '<div style="font-size:11px;color:#6e6e73;text-transform:uppercase;letter-spacing:.4px">' +
+      celdas[i][0] + '</div>' +
+      '<div style="font-size:22px;font-weight:700;color:' + (celdas[i][2] || '#1d1d1f') + '">' +
+      celdas[i][1] + '</div>' +
+      '<div style="font-size:11px;color:#6e6e73">' + (celdas[i][3] || '') + '</div></td>';
+  }
+  return html + '</tr></table>';
+}
+
+function pct(x) {
+  return Math.round(x * 100) + '%';
+}
+
+function colorRatio(x, umbral) {
+  const min = (umbral === undefined ? 85 : umbral) / 100;
+  return x >= min ? C.bien : x >= min * 0.7 ? C.aviso : C.malo;
+}
+
+function botonTracker(ss) {
+  return '<p style="margin:26px 0 0"><a href="' + ss.getUrl() +
+    '" style="background:#0071e3;color:#fff;padding:11px 18px;border-radius:9px;' +
+    'text-decoration:none;display:inline-block;font-weight:600">Abrir el tracker</a></p>';
+}
+
 /**
  * Un navegador no despierta a una web cerrada para avisarte. Un disparador de
  * Apps Script si manda el correo cada mañana, tengas el movil como lo tengas.
@@ -1669,36 +1749,83 @@ function recordatorioDiario() {
   const hoy = new Date();
   const año = Number(leerConfig('Año')) || hoy.getFullYear();
   const datos = leerAño(ss, año);
-  const est = estadoDelDia(datos, habitos, hoy, año);
+  const desde = fechaInicio();
+  const umbral = Number(leerConfig('Minimo semanal exigido')) || 85;
+  const castigo = penitenciaActiva();
+  const est = estadoDelDia(datos, habitos, hoy, año, castigo);
   const frase = fraseDelDia();
 
-  const pendientes = habitos
+  const ayer = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 1);
+  const cuenta = !desde || ayer >= desde;
+  const estAyer = cuenta ? estadoDelDia(datos, habitos, ayer, año, castigo) : null;
+  // Los fallos se cuentan hasta AYER: los de hoy aun no son fallos.
+  const semana = resumenPeriodo(datos, habitos, ayer, 7, año, castigo, desde);
+  const mes = resumenDelMes(datos, habitos, hoy, año, desde);
+
+  // Tres seguidos en 7 dias son penitencia. Avisar en el segundo es la
+  // diferencia entre un aviso y un parte de defuncion.
+  const enRiesgo = function (hab) {
+    return (semana.fallos[hab.nombre] || 0) >= 2 ? (semana.fallos[hab.nombre] || 0) : 0;
+  };
+
+  const lista = habitos
     .filter(function (h) { return aplicaHoy(h, hoy); })
     .map(function (h) {
-      return '<li>' + h.icono + ' <b>' + h.nombre + '</b> — ' + textoObjetivo(h) +
-        (h.innegociable ? ' <span style="color:#b3261e">innegociable</span>' : '') + '</li>';
+      const racha = calcularRacha(datos, h, ayer, año, desde);
+      const riesgo = enRiesgo(h);
+      return '<li style="margin-bottom:7px">' + h.icono + ' <b>' + h.nombre + '</b>' +
+        ' <span style="color:#6e6e73">— ' + textoObjetivo(h) + '</span>' +
+        (racha > 1 ? ' <span style="color:#157a3a;font-weight:600">🔥 ' + racha + '</span>' : '') +
+        (h.innegociable ? ' <span style="color:#b3261e;font-size:12px">innegociable</span>' : '') +
+        (riesgo >= 3
+          ? '<br><span style="font-size:12px;color:#b3261e">⛔ ' + riesgo +
+            ' fallos en 7 dias. Este es el que te esta hundiendo.</span>'
+          : riesgo
+            ? '<br><span style="font-size:12px;color:#b06d00">⚠️ ' + riesgo +
+              ' fallos en 7 dias. Al tercero, penitencia.</span>'
+            : '') +
+        '</li>';
     })
     .join('');
 
   const cuerpo =
-    '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;color:#1d1d1f">' +
+    '<div style="' + ESTILO_CORREO + '">' +
     '<h2 style="margin:0 0 4px">Hoy toca esto</h2>' +
-    '<p style="color:#6e6e73;margin:0 0 18px">' + hoy.toLocaleDateString() + '</p>' +
-    '<ul style="padding-left:18px;line-height:1.7">' + pendientes + '</ul>' +
+    '<p style="color:#6e6e73;margin:0 0 4px">' + hoy.toLocaleDateString() + '</p>' +
+    (estAyer && estAyer.exigibles
+      ? '<div style="background:' +
+        (estAyer.ratio >= 1 ? '#d6f0dd' : estAyer.ratio >= 0.7 ? '#fdf0d5' : '#fbe0de') +
+        ';padding:11px 14px;border-radius:9px;margin:16px 0">' +
+        '<b>Ayer:</b> ' + estAyer.hechos + ' de ' + estAyer.exigibles + ' · ' + estAyer.veredicto +
+        (estAyer.pendientes.length
+          ? '<br><span style="font-size:13px">Te faltaron: ' + estAyer.pendientes.join(', ') + '</span>'
+          : '') +
+        '</div>'
+      : '') +
+    tresCifras([
+      ['Ultimos 7 dias', semana.exigibles ? pct(semana.ratio) : '—',
+        colorRatio(semana.ratio, umbral), 'minimo ' + umbral + '%'],
+      ['Dias perfectos', String(semana.perfectos), null, 'de ' + semana.dias],
+      ['Este mes', mes.exigibles ? pct(mes.ratio) : '—', null,
+        mes.hechos + ' de ' + mes.exigibles],
+    ]) +
+    '<ul style="padding-left:18px;line-height:1.55;margin:0">' + lista + '</ul>' +
     (textoDeuda() !== 'Sin deuda'
-      ? '<p style="background:#fdf0d5;padding:10px 12px;border-radius:8px"><b>Deuda pendiente:</b> ' +
+      ? '<p style="background:#fdf0d5;padding:11px 14px;border-radius:9px"><b>Deuda pendiente:</b> ' +
         textoDeuda() + '. Se paga haciendo de mas.</p>'
       : '') +
-    (penitenciaActiva()
-      ? '<p style="background:#fbe0de;padding:10px 12px;border-radius:8px"><b>Penitencia sin cumplir:</b> ' +
-        penitenciaActiva() + '</p>'
-      : '') +
+    (castigo
+      ? '<p style="background:#fbe0de;padding:11px 14px;border-radius:9px"><b>Penitencia sin cumplir:</b> ' +
+        castigo + '<br><span style="font-size:13px">Tus recompensas siguen bloqueadas hasta que la marques.</span></p>'
+      : est.bloqueadas
+        ? '<p style="background:#fbe0de;padding:11px 14px;border-radius:9px">🔒 <b>Recompensas bloqueadas</b> — ' +
+          est.motivo + '</p>'
+        : '') +
     (frase
-      ? '<blockquote style="border-left:3px solid #d2d2d7;margin:22px 0;padding-left:14px;color:#6e6e73">' +
+      ? '<blockquote style="border-left:3px solid #d2d2d7;margin:24px 0;padding-left:14px;color:#6e6e73">' +
         frase.texto + '<br><small><b>' + frase.quien + '</b></small></blockquote>'
       : '') +
-    '<p><a href="' + ss.getUrl() + '" style="background:#0071e3;color:#fff;padding:10px 16px;' +
-    'border-radius:8px;text-decoration:none;display:inline-block">Abrir el tracker</a></p>' +
+    botonTracker(ss) +
     '</div>';
 
   MailApp.sendEmail({
@@ -1747,62 +1874,107 @@ function liquidarAyer() {
   recalcularTodo();
 }
 
+/** La prenda escrita en el contrato de Presion. Sale en el informe si fallas. */
+function textoContrato() {
+  const h = SpreadsheetApp.getActive().getSheetByName(HOJA_PRESION);
+  if (!h) return '';
+  return String(h.getRange(8, 2).getValue() || '').trim();
+}
+
 function informeSemanal() {
   const ss = SpreadsheetApp.getActive();
   const habitos = leerHabitos();
   const hoy = new Date();
   const año = Number(leerConfig('Año')) || hoy.getFullYear();
   const datos = leerAño(ss, año);
-
+  const desde = fechaInicio();
   const castigo = penitenciaActiva();
-  let hechos = 0, exigibles = 0, perfectos = 0;
-  const fallosPorHabito = {};
-  const cursor = new Date(hoy);
-  for (let d = 0; d < 7; d++) {
-    const est = estadoDelDia(datos, habitos, cursor, año, castigo);
-    hechos += est.hechos;
-    exigibles += est.exigibles;
-    if (est.exigibles && est.hechos >= est.exigibles) perfectos++;
-    for (let i = 0; i < habitos.length; i++) {
-      const hab = habitos[i];
-      if (!aplicaHoy(hab, cursor) || esCuota(hab)) continue;
-      if (!cumplido(hab, valorDe(datos, cursor.getMonth(), cursor.getDate(), hab.indice))) {
-        fallosPorHabito[hab.nombre] = (fallosPorHabito[hab.nombre] || 0) + 1;
-      }
-    }
-    cursor.setDate(cursor.getDate() - 1);
-  }
 
-  const ratio = exigibles ? hechos / exigibles : 0;
+  const semana = resumenPeriodo(datos, habitos, hoy, 7, año, castigo, desde);
+  // La semana anterior, para poder decir si vas a mejor o a peor. Un
+  // porcentaje suelto no dice nada; comparado con el de hace siete dias, si.
+  const anterior = resumenPeriodo(
+    datos, habitos, new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - 7), 7, año, castigo, desde);
+  const mes = resumenDelMes(datos, habitos, hoy, año, desde);
+
+  const ratio = semana.ratio;
   const umbral = Number(leerConfig('Minimo semanal exigido')) || 85;
   const cumple = ratio * 100 >= umbral;
-  const peores = Object.keys(fallosPorHabito)
-    .sort(function (a, b) { return fallosPorHabito[b] - fallosPorHabito[a]; })
-    .slice(0, 3);
+  const delta = anterior.exigibles ? Math.round((ratio - anterior.ratio) * 100) : null;
+
+  // Tabla por habito: es lo que convierte "78%" en algo sobre lo que actuar,
+  // y lo que tu auditor puede leer de un vistazo para saber por donde ir.
+  const filas = habitos.map(function (hab) {
+    const rs = resumenPeriodo(datos, [hab], hoy, 7, año, castigo, desde);
+    return {
+      hab: hab, hechos: rs.hechos, exigibles: rs.exigibles, ratio: rs.ratio,
+      racha: calcularRacha(datos, hab, hoy, año, desde),
+    };
+  }).sort(function (a, b) { return a.ratio - b.ratio; });
+
+  const tabla = filas.map(function (f) {
+    return '<tr>' +
+      '<td style="padding:6px 8px 6px 0">' + f.hab.icono + ' ' + f.hab.nombre +
+      (f.hab.innegociable ? ' <span style="color:#b3261e;font-size:11px">INN</span>' : '') + '</td>' +
+      '<td style="padding:6px 8px;color:#6e6e73;font-family:monospace;white-space:nowrap">' +
+      barraTexto(f.ratio) + '</td>' +
+      '<td style="padding:6px 0;text-align:right;font-weight:600;color:' +
+      colorRatio(f.ratio, umbral) + '">' + (f.exigibles ? pct(f.ratio) : '—') + '</td>' +
+      '<td style="padding:6px 0 6px 10px;text-align:right;color:#6e6e73;white-space:nowrap">' +
+      f.hechos + '/' + f.exigibles + '</td>' +
+      '<td style="padding:6px 0 6px 10px;text-align:right;color:#157a3a;white-space:nowrap">' +
+      (f.racha > 1 ? '🔥 ' + f.racha : '') + '</td></tr>';
+  }).join('');
+
+  const mejorRacha = filas.reduce(function (m, f) { return Math.max(m, f.racha); }, 0);
+  const prenda = textoContrato();
+  const quien = String(leerConfig('Tu nombre') || '').trim();
 
   const veredicto = ratio >= 0.95 ? 'Semana impecable. Sube el liston.'
     : ratio >= 0.8 ? 'Semana solida. Ataca tu peor habito.'
     : ratio >= 0.6 ? 'Semana mediocre. Reduce habitos y cumple los que queden.'
     : 'Semana rota. Vuelve a los innegociables y nada mas.';
 
-  // Con auditoria cruzada los dos recibis el informe del otro. Sin el nombre,
-  // son dos correos titulados igual y no se sabe cual es de quien.
-  const quien = String(leerConfig('Tu nombre') || '').trim();
   const cuerpo =
-    '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;color:#1d1d1f">' +
-    '<h2 style="margin:0 0 16px">Informe de la semana' + (quien ? ' · ' + quien : '') + '</h2>' +
-    '<p style="font-size:34px;font-weight:700;margin:0;color:' + (cumple ? C.bien : C.malo) + '">' +
-    Math.round(ratio * 100) + '%</p>' +
-    '<p style="color:#6e6e73;margin:0 0 18px">Minimo del contrato: ' + umbral + '% · ' +
-    perfectos + ' dias perfectos de 7</p>' +
-    (peores.length
-      ? '<p><b>Lo que te esta hundiendo:</b><br>' +
-        peores.map(function (n) { return n + ' (' + fallosPorHabito[n] + ' fallos)'; }).join('<br>') + '</p>'
+    '<div style="' + ESTILO_CORREO + '">' +
+    '<h2 style="margin:0 0 2px">Informe de la semana' + (quien ? ' · ' + quien : '') + '</h2>' +
+    '<p style="color:#6e6e73;margin:0">Semana terminada el ' + hoy.toLocaleDateString() + '</p>' +
+    '<p style="font-size:44px;font-weight:700;margin:14px 0 0;color:' +
+    (cumple ? C.bien : C.malo) + '">' + pct(ratio) + '</p>' +
+    '<p style="color:#6e6e73;margin:0">' +
+    (delta === null ? 'primera semana registrada'
+      : delta === 0 ? 'igual que la semana pasada'
+      : (delta > 0 ? '▲ ' + delta : '▼ ' + Math.abs(delta)) + ' puntos respecto a la semana pasada') +
+    '</p>' +
+    tresCifras([
+      ['Minimo del contrato', umbral + '%', cumple ? C.bien : C.malo, cumple ? 'cumplido' : 'incumplido'],
+      ['Dias perfectos', semana.perfectos + ' de ' + semana.dias, null, 'la semana pasada, ' + anterior.perfectos],
+      ['Mejor racha viva', String(mejorRacha), null, 'dias seguidos'],
+    ]) +
+    '<p style="font-size:11px;color:#6e6e73;text-transform:uppercase;letter-spacing:.4px;margin:22px 0 2px">' +
+    'Habito por habito</p>' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" ' +
+    'style="border-collapse:collapse;font-size:14px">' + tabla + '</table>' +
+    '<p style="color:#6e6e73;font-size:13px;margin:10px 0 0">De peor a mejor. ' +
+    'Acumulado del mes: <b style="color:#1d1d1f">' + (mes.exigibles ? pct(mes.ratio) : '—') + '</b>' +
+    ' (' + mes.hechos + ' de ' + mes.exigibles + ').</p>' +
+    (textoDeuda() !== 'Sin deuda'
+      ? '<p style="background:#fdf0d5;padding:11px 14px;border-radius:9px"><b>Deuda pendiente:</b> ' +
+        textoDeuda() + '</p>'
       : '') +
-    (textoDeuda() !== 'Sin deuda' ? '<p><b>Deuda pendiente:</b> ' + textoDeuda() + '</p>' : '') +
-    '<p style="background:' + (cumple ? '#d6f0dd' : '#fbe0de') + ';padding:12px;border-radius:8px">' +
-    (cumple ? 'Contrato CUMPLIDO esta semana.' : 'Contrato INCUMPLIDO. Toca ejecutar la prenda.') + '</p>' +
-    '<p>' + veredicto + '</p></div>';
+    (castigo
+      ? '<p style="background:#fbe0de;padding:11px 14px;border-radius:9px"><b>Penitencia sin cumplir:</b> ' +
+        castigo + '</p>'
+      : '') +
+    '<p style="background:' + (cumple ? '#d6f0dd' : '#fbe0de') + ';padding:13px 15px;border-radius:9px;margin-top:20px">' +
+    (cumple
+      ? '<b>Contrato CUMPLIDO esta semana.</b>'
+      : '<b>Contrato INCUMPLIDO.</b> Toca ejecutar la prenda.' +
+        (prenda ? '<br><span style="font-size:13px">' + prenda + '</span>' : '')) +
+    '</p>' +
+    '<p>' + veredicto + '</p>' +
+    botonTracker(ss) +
+    '</div>';
 
   const mio = String(leerConfig('Email para los avisos') || Session.getEffectiveUser().getEmail());
   const auditor = String(leerConfig('Email de tu auditor') || '');
@@ -1810,7 +1982,8 @@ function informeSemanal() {
   if (destinos) {
     MailApp.sendEmail({
       to: destinos,
-      subject: 'Informe semanal' + (quien ? ' de ' + quien : '') + ': ' + Math.round(ratio * 100) + '%',
+      subject: 'Informe semanal' + (quien ? ' de ' + quien : '') + ': ' + pct(ratio) +
+        (delta === null ? '' : delta >= 0 ? ' (▲' + delta + ')' : ' (▼' + Math.abs(delta) + ')'),
       htmlBody: cuerpo,
     });
   }
