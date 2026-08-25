@@ -990,15 +990,42 @@ function calcularRacha(datos, hab, hasta, año, desde) {
 /** Dias del mes en los que ese habito era exigible, hasta la fecha dada. */
 function exigiblesDelMes(hab, mes, año, hasta, desde) {
   const dias = new Date(año, mes + 1, 0).getDate();
-  const tope = (hasta.getFullYear() === año && hasta.getMonth() === mes) ? hasta.getDate() : dias;
+  const iMes = año * 12 + mes;
+  const iHasta = hasta.getFullYear() * 12 + hasta.getMonth();
+  // Un mes que todavia no ha llegado no exige nada. Sin este corte, en agosto
+  // diciembre pedia sus 31 dias y la pestaña salia con un 0% que no es real.
+  if (iMes > iHasta) return 0;
+  const tope = iMes === iHasta ? hasta.getDate() : dias;
   // Igual que con la racha: el mes en que empezaste solo cuenta desde ese dia.
-  const primero = desde && desde.getFullYear() === año && desde.getMonth() === mes
-    ? desde.getDate()
-    : (desde && (desde.getFullYear() > año || (desde.getFullYear() === año && desde.getMonth() > mes)) ? tope + 1 : 1);
+  let primero = 1;
+  if (desde) {
+    const iDesde = desde.getFullYear() * 12 + desde.getMonth();
+    if (iDesde > iMes) return 0;
+    if (iDesde === iMes) primero = desde.getDate();
+  }
   if (primero > tope) return 0;
   if (esCuota(hab)) return Math.round(((tope - primero + 1) / 7) * cuotaSemanal(hab));
   let n = 0;
   for (let d = primero; d <= tope; d++) if (aplicaHoy(hab, new Date(año, mes, d))) n++;
+  return n;
+}
+
+/**
+ * Dias cumplidos del mes. Cuenta solo los dias que ya han pasado, posteriores
+ * a la fecha de inicio y en los que el habito tocaba: un habito de "evitar"
+ * tiene la casilla vacia todo el año, y sin estos tres cortes el mes que viene
+ * ya aparece cumplido al 100%.
+ */
+function hechosDelMes(datos, hab, mes, año, hasta, desde) {
+  const dias = new Date(año, mes + 1, 0).getDate();
+  let n = 0;
+  for (let d = 1; d <= dias; d++) {
+    const fecha = new Date(año, mes, d);
+    if (fecha > hasta) break;
+    if (desde && fecha < desde) continue;
+    if (!aplicaHoy(hab, fecha)) continue;
+    if (cumplido(hab, valorDe(datos, mes, d, hab.indice))) n++;
+  }
   return n;
 }
 
@@ -1221,10 +1248,7 @@ function recalcularTodo() {
     for (let i = 0; i < MAX_HABITOS; i++) {
       const hab = buscarPorIndice(habitos, i);
       if (!hab) { filas.push(['', '', '', '']); continue; }
-      let hechos = 0;
-      for (let d = 1; d <= diasMes; d++) {
-        if (cumplido(hab, valorDe(datos, m, d, i))) hechos++;
-      }
+      const hechos = hechosDelMes(datos, hab, m, año, hoy, desde);
       const exigibles = exigiblesDelMes(hab, m, año, hoy, desde);
       const finDeMes = new Date(año, m, diasMes);
       const hasta = finDeMes < hoy ? finDeMes : hoy;
@@ -1297,8 +1321,7 @@ function panelAlDia(ss, habitos, datos, hoy, año, desde) {
   const tabla = [];
   for (let i = 0; i < habitos.length; i++) {
     const hab = habitos[i];
-    let hechos = 0;
-    for (let d = 1; d <= diasMes; d++) if (cumplido(hab, valorDe(datos, mes, d, hab.indice))) hechos++;
+    const hechos = hechosDelMes(datos, hab, mes, año, hoy, desde);
     const exigibles = exigiblesDelMes(hab, mes, año, hoy, desde);
     const racha = calcularRacha(datos, hab, hoy, año, desde);
     mejorRacha = Math.max(mejorRacha, racha);

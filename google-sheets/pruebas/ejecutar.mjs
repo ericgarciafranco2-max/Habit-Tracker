@@ -14,7 +14,7 @@ import { entorno, libro, correos, alertas, contador, reiniciarContador } from '.
 
 const codigo = fs.readFileSync(new URL('../Tracker.gs', import.meta.url), 'utf8');
 const ctx = vm.createContext({ ...entorno, Date, Math, Object, String, Number, Array, JSON, RegExp, isNaN });
-vm.runInContext(codigo + '\n;globalThis.__api = { crearTracker, recalcularTodo, prepararHoy, liquidarAyer, informeSemanal, recordatorioDiario, onEdit, verificar, leerHabitos, leerConfig, estadoDelDia, leerAño, textoDeuda, calcularRacha, exigiblesDelMes, cumplido, aplicaHoy, fechaInicio, actualizar, fasesHechas, FILA_HABITOS };', ctx);
+vm.runInContext(codigo + '\n;globalThis.__api = { crearTracker, recalcularTodo, prepararHoy, liquidarAyer, informeSemanal, recordatorioDiario, onEdit, verificar, leerHabitos, leerConfig, estadoDelDia, leerAño, textoDeuda, calcularRacha, exigiblesDelMes, hechosDelMes, cumplido, aplicaHoy, fechaInicio, actualizar, fasesHechas, FILA_HABITOS };', ctx);
 const api = ctx.__api;
 
 let fallos = 0;
@@ -177,6 +177,45 @@ try {
     api.leerHabitos()[0], new Date().getMonth(), new Date().getFullYear(), new Date(), desde);
   comprobar('los dias exigibles se cuentan desde que empezaste', exigibles <= 1,
     exigibles + ' dias exigibles el mes en que empiezas');
+}
+
+/* ------------- Un mes que aun no ha llegado no cuenta ------------------ */
+// La pestaña de un mes futuro daba 31 exigibles y, en un habito de "evitar",
+// 31 hechos: la casilla vacia significa exito, asi que octubre aparecia al
+// 100% en agosto. Ni se exige ni se cumple lo que no ha pasado.
+{
+  const evitar = api.leerHabitos().find((h) => h.tipo === 'Evitar');
+  const datosAño = api.leerAño(libro, new Date().getFullYear());
+  const hasta = new Date(2026, 7, 25);   // 25 de agosto
+  const desde = new Date(2026, 7, 1);
+
+  const exigFuturo = api.exigiblesDelMes(evitar, 9, 2026, hasta, desde);
+  comprobar('un mes que no ha llegado no exige nada', exigFuturo === 0,
+    exigFuturo + ' dias exigibles en octubre visto desde agosto');
+
+  const hechosFuturo = api.hechosDelMes(datosAño, evitar, 9, 2026, hasta, desde);
+  comprobar('un mes que no ha llegado no da nada por cumplido', hechosFuturo === 0,
+    hechosFuturo + ' dias cumplidos en octubre visto desde agosto');
+
+  const hechosMesEnCurso = api.hechosDelMes(datosAño, evitar, 7, 2026, hasta, desde);
+  comprobar('el mes en curso solo cuenta hasta hoy', hechosMesEnCurso <= 25,
+    hechosMesEnCurso + ' dias cumplidos a 25 de agosto');
+
+  const antesDeEmpezar = api.hechosDelMes(datosAño, evitar, 7, 2026, hasta, new Date(2026, 7, 20));
+  comprobar('lo anterior a la fecha de inicio no suma', antesDeEmpezar <= 6,
+    antesDeEmpezar + ' dias cumplidos empezando el 20 de agosto');
+
+  // Y lo mismo escrito en la pestaña real, si este año queda algun mes por venir.
+  if (new Date().getMonth() < 11) {
+    api.recalcularTodo();
+    const nombres = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    const mesQueViene = new Date().getMonth() + 1;
+    const hoja = libro.getSheetByName(nombres[mesQueViene]);
+    const dias = new Date(new Date().getFullYear(), mesQueViene + 1, 0).getDate();
+    const fila = hoja.getRange(4, dias + 2, 1, 2).getValues()[0];
+    comprobar('la pestaña del mes que viene sale a cero', fila[0] === 0 && fila[1] === 0,
+      fila[0] + ' hechos y ' + fila[1] + ' exigibles');
+  }
 }
 
 /* --------------- Cambiar habitos no reconstruye la hoja ---------------- */

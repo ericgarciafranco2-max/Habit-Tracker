@@ -55,6 +55,18 @@ recompensas bloqueadas o desbloqueadas y los graficos del panel.
 | `Frases` | 26 frases con autor y fuente |
 | `Ajustes` | Tus habitos y tu configuracion. **Es el unico sitio donde tocar** |
 
+**Que mes es cada pestaña.** `Ene`…`Dic` son fijos: pertenecen al año que
+pongas en `Ajustes!Año`, y la pestaña `Ago` es siempre agosto de ese año. El
+script no adivina el mes por la pestaña, mira la fecha del ordenador: con ella
+decide en que rejilla escribe `Hoy` y de que mes habla el `Panel`. El informe
+semanal cubre los ultimos 7 dias, mires la pestaña que mires.
+
+**Los meses que no han llegado salen vacios.** Ni exigen ni cuentan como
+cumplidos. Importa sobre todo en los habitos de *evitar*: ahi la casilla vacia
+significa "no he caido", asi que sin este corte diciembre aparecia al 100% en
+agosto. El mes en curso solo cuenta hasta hoy, y ningun mes cuenta dias
+anteriores a `Empezado el`.
+
 ## Lo que aqui sale mejor que en la aplicacion
 
 **Los avisos llegan de verdad.** Un navegador no despierta a una web cerrada
