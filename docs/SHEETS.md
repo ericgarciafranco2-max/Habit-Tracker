@@ -75,6 +75,26 @@ significa "no he caido", asi que sin este corte diciembre aparecia al 100% en
 agosto. El mes en curso solo cuenta hasta hoy, y ningun mes cuenta dias
 anteriores a `Empezado el`.
 
+## Que se rellena en `Presion`
+
+Tres bloques, y solo dos son tuyos:
+
+**CONTRATO.** `Desde`, `Hasta`, `Que pasa exactamente si fallo`, `Mi auditor` y
+`Firmado el` los escribes tu. No los lee ningun codigo: existen para que lo que
+vas a hacer este escrito y firmado, que es de lo que va un contrato. El umbral
+y el email del auditor **no se tocan aqui**: son un reflejo de Ajustes.
+
+**PENITENCIAS.** Esto si lo lee el codigo, y es la parte que muerde. Escribe
+las tuyas y ponles dureza 1 a 3. Cuando fallas el mismo habito **3 veces en 7
+dias**, el tracker te asigna una sola: le pone fecha en `Asignada el` y, hasta
+que marques `Cumplida`, la pestaña `Hoy` dice **🔒 BLOQUEADAS** y el correo de
+cada mañana te la recuerda. Solo hay una activa a la vez, y una pagada vuelve
+al saco: no se agotan.
+
+**RECOMPENSAS.** La lista de lo que te dejas hacer cuando el dia esta cerrado.
+Es una lista, no un candado: nadie te lo impide. Escribe cosas que de verdad te
+importen o el bloqueo no significa nada.
+
 ## Auditoria cruzada: tu amigo y tu
 
 El unico sitio donde se pone el auditor es **`Ajustes` → `Email de tu auditor`**.

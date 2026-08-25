@@ -1554,20 +1554,43 @@ function penitenciaActiva() {
   return null;
 }
 
+/**
+ * Asigna una penitencia, si no hay ninguna pendiente.
+ *
+ * Una ya pagada vuelve al saco. Antes se gastaba para siempre: con las cinco
+ * de ejemplo, a la sexta sancion no pasaba nada y fallar volvia a ser gratis
+ * sin que nada lo dijera. Se prefiere la dureza pedida, luego la que lleva mas
+ * tiempo sin caer, para que no toque siempre la misma.
+ */
 function asignarPenitencia(dureza, motivo) {
   const h = SpreadsheetApp.getActive().getSheetByName(HOJA_PRESION);
   if (!h || penitenciaActiva()) return;
   const filas = h.getRange(16, 1, 12, 4).getValues();
   let elegida = -1;
+  let mejor = null;
   for (let i = 0; i < filas.length; i++) {
     if (!filas[i][0]) continue;
-    if (filas[i][2] && filas[i][3] !== true) return;
-    if (Number(filas[i][1]) === dureza && !filas[i][2]) { elegida = i; break; }
-    if (elegida < 0 && !filas[i][2]) elegida = i;
+    const usada = Boolean(filas[i][2]);
+    const clave = [
+      Number(filas[i][1]) === dureza ? 0 : 1,
+      usada ? 1 : 0,
+      usada ? new Date(filas[i][2]).getTime() : 0,
+    ];
+    if (mejor === null || antesQue(clave, mejor)) { mejor = clave; elegida = i; }
   }
   if (elegida < 0) return;
   h.getRange(16 + elegida, 3).setValue(new Date());
+  // Se desmarca: la que se recicla vuelve a estar pendiente de pago.
+  h.getRange(16 + elegida, 4).setValue(false);
   apuntarHistorial(fechaISO(new Date()), 'Sancion', motivo + ' -> ' + filas[elegida][0]);
+}
+
+/** Compara dos claves de ordenacion campo a campo. */
+function antesQue(a, b) {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return a[i] < b[i];
+  }
+  return false;
 }
 
 /* ================================================================== */

@@ -14,7 +14,7 @@ import { entorno, libro, correos, alertas, contador, reiniciarContador } from '.
 
 const codigo = fs.readFileSync(new URL('../Tracker.gs', import.meta.url), 'utf8');
 const ctx = vm.createContext({ ...entorno, Date, Math, Object, String, Number, Array, JSON, RegExp, isNaN });
-vm.runInContext(codigo + '\n;globalThis.__api = { crearTracker, recalcularTodo, prepararHoy, liquidarAyer, informeSemanal, recordatorioDiario, onEdit, verificar, leerHabitos, leerConfig, estadoDelDia, leerAño, textoDeuda, calcularRacha, exigiblesDelMes, hechosDelMes, cumplido, aplicaHoy, fechaInicio, actualizar, fasesHechas, FILA_HABITOS };', ctx);
+vm.runInContext(codigo + '\n;globalThis.__api = { crearTracker, recalcularTodo, prepararHoy, liquidarAyer, informeSemanal, recordatorioDiario, onEdit, verificar, leerHabitos, leerConfig, estadoDelDia, leerAño, textoDeuda, asignarPenitencia, penitenciaActiva, calcularRacha, exigiblesDelMes, hechosDelMes, cumplido, aplicaHoy, fechaInicio, actualizar, fasesHechas, FILA_HABITOS };', ctx);
 const api = ctx.__api;
 
 let fallos = 0;
@@ -127,6 +127,45 @@ api.informeSemanal();
 comprobar('manda el informe semanal', correos.length === 2, correos.length + ' correos');
 comprobar('el informe lleva el porcentaje',
   correos.length > 1 && /\d+%/.test(correos[1].htmlBody), 'sin porcentaje');
+
+/* ----------------------- Penitencias ----------------------------------- */
+// Una penitencia ya pagada vuelve al saco. Antes se gastaba para siempre: con
+// las cinco de ejemplo, a la sexta sancion no pasaba nada y fallar volvia a
+// ser gratis sin que nada lo dijera.
+{
+  const presion = libro.getSheetByName('Presion');
+  presion.getRange(16, 3, 12, 2).clearContent();
+
+  api.asignarPenitencia(2, 'prueba');
+  const primera = api.penitenciaActiva();
+  comprobar('fallar tres veces asigna una penitencia', Boolean(primera), String(primera));
+  comprobar('y bloquea las recompensas mientras no la pagues',
+    Boolean(api.estadoDelDia(api.leerAño(libro, new Date().getFullYear()),
+      api.leerHabitos(), new Date(), new Date().getFullYear()).bloqueadas), 'no bloquea');
+
+  api.asignarPenitencia(2, 'otra mas');
+  comprobar('con una pendiente no se acumula otra',
+    api.penitenciaActiva() === primera, String(api.penitenciaActiva()));
+
+  // Se pagan ocho seguidas: mas que penitencias hay escritas.
+  let asignadas = 0;
+  for (let i = 0; i < 8; i++) {
+    const activa = api.penitenciaActiva();
+    if (!activa) break;
+    asignadas++;
+    const filas = presion.getRange(16, 1, 12, 4).getValues();
+    for (let f = 0; f < filas.length; f++) {
+      if (filas[f][0] === activa) presion.getRange(16 + f, 4).setValue(true);
+    }
+    api.asignarPenitencia(2, 'sancion ' + i);
+  }
+  comprobar('las penitencias no se agotan: la pagada vuelve al saco',
+    asignadas === 8, asignadas + ' sanciones antes de quedarse sin munición');
+  comprobar('la reciclada vuelve a estar pendiente de pago',
+    Boolean(api.penitenciaActiva()), 'ninguna activa');
+
+  presion.getRange(16, 3, 12, 2).clearContent();
+}
 
 /* --------------------- Auditoria cruzada ------------------------------- */
 // Dos amigos que se auditan reciben cada uno el informe del otro. Sin nombre
