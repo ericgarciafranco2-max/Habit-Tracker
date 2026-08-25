@@ -194,6 +194,9 @@ function onOpen() {
     .addItem('Enviar informe semanal', 'informeSemanal')
     .addSeparator()
     .addItem('Activar avisos automaticos', 'activarAvisos')
+    // Para comprobar desde el movil que el correo sale de verdad, sin tener
+    // que abrir el editor de Apps Script ni esperar a las 7 de la mañana.
+    .addItem('Enviar ahora el aviso de hoy', 'recordatorioDiario')
     .addItem('Comprobar que todo esta bien', 'verificar')
     .addSeparator()
     .addItem('Rehacer el tracker desde cero', 'rehacerTracker')
