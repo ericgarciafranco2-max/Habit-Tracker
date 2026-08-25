@@ -17,7 +17,7 @@ mismas frases.
 3. Borra lo que haya y pega el contenido de
    [`google-sheets/Tracker.gs`](../google-sheets/Tracker.gs). Guarda.
 4. Vuelve a la hoja y **recargala**. Aparece el menu **⚡ Habit Tracker**.
-5. **⚡ Habit Tracker → Crear / rehacer el tracker**.
+5. **⚡ Habit Tracker → Crear o continuar el tracker**.
    - Google pedira permisos: *Revisar permisos* → tu cuenta → *Configuracion
      avanzada* → *Ir a (proyecto)* → *Permitir*. El aviso de "aplicacion no
      verificada" sale porque el script es tuyo y no esta en ninguna tienda.
@@ -25,8 +25,16 @@ mismas frases.
      construccion completa no cabe en los seis minutos que da Apps Script, asi
      que va por fases: se para a tiempo, apunta por donde iba y deja programada
      una continuacion para dentro de un minuto. Termina sola en dos o tres
-     pasadas. Si no quieres esperar, **⚡ Habit Tracker → Continuar la
-     construccion**.
+     pasadas. Si no quieres esperar, vuelve a darle a **Crear o continuar el
+     tracker**.
+   - **Si te sale "Se ha superado el tiempo maximo de ejecucion", tampoco.**
+     Es el corte duro de Apps Script cayendo dentro de una fase, sin darle
+     tiempo al aviso de arriba. Antes de construir nada queda armado un
+     disparador de reserva, asi que la construccion se retoma sola unos siete
+     minutos despues. Si tienes prisa, dale otra vez a **Crear o continuar el
+     tracker**: sigue por donde iba, no empieza de cero. Nunca uses "Rehacer el
+     tracker desde cero" para esto: eso si tira lo construido y vuelve a
+     empezar.
    - El mes en curso se construye el primero, asi que puedes empezar a marcar
      sin esperar a que esten los doce.
 6. **⚡ Habit Tracker → Activar avisos automaticos**.
@@ -166,10 +174,10 @@ dias crecia usando la ultima fila de toda la hoja en vez de la de su bloque.
 | No aparece el menu ⚡ | Recarga la hoja. El menu se crea al abrirla, no al pegar el codigo |
 | "Se necesita autorizacion" | Ejecuta cualquier opcion del menu y acepta los permisos |
 | Todo sale #ERROR! | Version antigua del script: vuelve a pegar la actual |
-| Los porcentajes no cambian | Menu → *Recalcular todo* |
+| Los porcentajes no cambian | Menu → *Actualizar tras cambiar habitos* |
 | No llegan los correos | Menu → *Activar avisos automaticos*, y revisa el email en Ajustes |
 | Cambio un habito | No hagas nada: Hoy se refresca solo. Si no, menu → *Actualizar tras cambiar habitos* |
-| Se quedo a medias | Menu → *Continuar la construccion* (o espera un minuto) |
+| "Tiempo maximo de ejecucion" o se quedo a medias | Menu → *Crear o continuar el tracker*. Sigue por donde iba. O no hagas nada: se retoma sola |
 | Quiero empezar de cero | Menu → *Rehacer el tracker desde cero* (tarda minutos) |
 
 Antes de nada, prueba **⚡ Habit Tracker → Comprobar que todo esta bien**: te

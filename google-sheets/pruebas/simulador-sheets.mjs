@@ -256,10 +256,14 @@ export const entorno = {
     },
     WeekDay: { SUNDAY: 'SUNDAY' },
     newTrigger: (nombre) => {
-      const t = {};
-      ['timeBased','atHour','everyDays','onWeekDay','after'].forEach((f) => { t[f] = () => t; });
+      // El retraso se guarda porque importa: la red de seguridad tiene que
+      // quedar POR ENCIMA del limite de 6 minutos para no arrancar encima de
+      // la ejecucion que sigue viva.
+      const t = { retraso: null };
+      ['timeBased','atHour','everyDays','onWeekDay'].forEach((f) => { t[f] = () => t; });
+      t.after = (ms) => { t.retraso = ms; return t; };
       t.create = () => {
-        const creado = { getHandlerFunction: () => nombre };
+        const creado = { getHandlerFunction: () => nombre, retraso: t.retraso };
         disparadores.push(creado);
         return creado;
       };

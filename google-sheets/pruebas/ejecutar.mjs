@@ -369,6 +369,66 @@ comprobar('las pestañas quedan en orden, con Hoy la primera',
   comprobar('y los doce meses', creados() === 12, creados() + '/12');
 }
 
+/* ------------- La construccion sobrevive a una muerte subita ----------- */
+// El corte por tiempo se mira ENTRE fases, asi que una fase que arranca al
+// filo puede llevarse por delante los 6 minutos sin pasar por el aviso
+// ordenado. Antes, cuando eso pasaba no quedaba nada programado: el tracker se
+// quedaba a medias hasta que alguien volvia a darle a Ejecutar. Ahora la red
+// de seguridad se arma ANTES de construir nada.
+{
+  const mod = await import('./simulador-sheets.mjs?muerte=1');
+  // Sin Charts, la fase del Panel revienta: una muerte subita como cualquier
+  // otra, y sin aviso ordenado de por medio.
+  const roto = { ...mod.entorno };
+  delete roto.Charts;
+  const ctx4 = vm.createContext({
+    ...roto, Date, Math, Object, String, Number, Array, JSON, RegExp, isNaN,
+  });
+  vm.runInContext(codigo +
+    '\n;globalThis.__api = { crearTracker, continuarConstruccion, fasesHechas, FASES, MAX_INTENTOS };', ctx4);
+
+  let murio = false;
+  try { ctx4.__api.crearTracker(); } catch (err) { murio = true; }
+  comprobar('la fase que falla tumba la ejecucion', murio, 'no fallo, la prueba no vale');
+
+  const red = mod.disparadores.filter((t) => t.getHandlerFunction() === 'continuarConstruccion');
+  comprobar('una muerte subita deja programada la continuacion', red.length === 1,
+    red.length + ' disparadores de continuacion');
+  comprobar('y la programa por encima del limite de 6 minutos, para no pisarse',
+    red.length === 1 && red[0].retraso > 6 * 60 * 1000, red.length ? red[0].retraso + ' ms' : 'ninguno');
+
+  // Arreglado lo que fallaba, la continuacion termina el trabajo.
+  const ctx5 = vm.createContext({
+    ...mod.entorno, Date, Math, Object, String, Number, Array, JSON, RegExp, isNaN,
+  });
+  vm.runInContext(codigo +
+    '\n;globalThis.__api = { crearTracker, continuarConstruccion, fasesHechas, FASES };', ctx5);
+  ctx5.__api.continuarConstruccion();
+  comprobar('y al reanudar termina por donde iba',
+    ctx5.__api.fasesHechas().length === ctx5.__api.FASES.length,
+    ctx5.__api.fasesHechas().length + ' de ' + ctx5.__api.FASES.length + ' fases');
+
+  // Un fallo que se repite siempre no puede dejar un disparador rearmandose
+  // cada siete minutos hasta el fin de los tiempos.
+  const mod2 = await import('./simulador-sheets.mjs?tope=1');
+  const roto2 = { ...mod2.entorno };
+  delete roto2.Charts;
+  const ctx6 = vm.createContext({
+    ...roto2, Date, Math, Object, String, Number, Array, JSON, RegExp, isNaN,
+  });
+  vm.runInContext(codigo +
+    '\n;globalThis.__api = { crearTracker, MAX_INTENTOS };', ctx6);
+  for (let i = 0; i < ctx6.__api.MAX_INTENTOS + 1; i++) {
+    try { ctx6.__api.crearTracker(); } catch (err) { /* muere en la misma fase */ }
+  }
+  comprobar('deja de reintentar cuando el fallo se repite siempre',
+    !mod2.disparadores.some((t) => t.getHandlerFunction() === 'continuarConstruccion'),
+    mod2.disparadores.map((t) => t.getHandlerFunction()).join(',') || 'ninguno');
+  comprobar('y dice donde mirar el error',
+    mod2.alertas.join(' ').indexOf('Ejecuciones') > 0,
+    mod2.alertas[mod2.alertas.length - 1] || 'sin aviso');
+}
+
 /* --------------------------- Coste de la API --------------------------- */
 // Apps Script aborta la ejecucion a los 6 minutos y cada llamada a Sheets es
 // un viaje al servidor, asi que el numero de operaciones decide si

@@ -221,6 +221,13 @@ const FASES = ['datos', 'ajustes', 'hoy', 'panel', 'universidad', 'presion', 'me
   .concat(MESES.map(function (m) { return 'mes-' + m; }))
   .concat(['orden', 'validaciones', 'recalculo', 'preparar']);
 const PROP_PROGRESO = 'PROGRESO_CONSTRUCCION';
+const PROP_INTENTOS = 'INTENTOS_CONSTRUCCION';
+/**
+ * Tope de pasadas de construccion. La red de seguridad reintenta sola, y sin
+ * un tope un fallo que se repite siempre dejaria un disparador rearmandose
+ * cada siete minutos para siempre.
+ */
+const MAX_INTENTOS = 15;
 
 function fasesHechas() {
   const v = PropertiesService.getScriptProperties().getProperty(PROP_PROGRESO);
@@ -235,6 +242,11 @@ function marcarFase(nombre) {
 
 function reiniciarProgreso() {
   PropertiesService.getScriptProperties().setProperty(PROP_PROGRESO, '');
+  PropertiesService.getScriptProperties().setProperty(PROP_INTENTOS, '0');
+}
+
+function intentosDeConstruccion() {
+  return Number(PropertiesService.getScriptProperties().getProperty(PROP_INTENTOS)) || 0;
 }
 
 /**
@@ -270,6 +282,30 @@ function borrarContinuaciones() {
   const lista = ScriptApp.getProjectTriggers();
   for (let i = 0; i < lista.length; i++) {
     if (lista[i].getHandlerFunction() === 'continuarConstruccion') ScriptApp.deleteTrigger(lista[i]);
+  }
+}
+
+/**
+ * Red de seguridad: un disparador que retoma la construccion aunque esta
+ * ejecucion muera de golpe.
+ *
+ * El corte por tiempo se comprueba ENTRE fases, asi que una fase que arranca
+ * al filo puede llevarse por delante el limite de seis minutos sin pasar por
+ * el aviso ordenado. Cuando eso pasa no queda nada programado y el tracker se
+ * queda a medias hasta que alguien vuelve a darle a Ejecutar.
+ *
+ * Va a siete minutos a proposito: mas alla del limite duro, para no arrancar
+ * una segunda ejecucion encima de la que esta corriendo. Si esta termina bien,
+ * lo borra; si se para de forma ordenada, lo reprograma a un minuto.
+ */
+function armarRedDeSeguridad() {
+  try {
+    borrarContinuaciones();
+    ScriptApp.newTrigger('continuarConstruccion').timeBased().after(7 * 60 * 1000).create();
+  } catch (err) {
+    // Sin permiso para crear disparadores se sigue construyendo igual: la red
+    // es una comodidad, no un requisito.
+    Logger.log('no se pudo armar la red de seguridad: ' + err);
   }
 }
 
@@ -364,6 +400,21 @@ function crearTracker() {
     ss.setSpreadsheetTimeZone(ss.getSpreadsheetTimeZone() || 'Europe/Madrid');
     limpiarFormatosVolatiles(ss);
   }
+
+  const intento = intentosDeConstruccion() + 1;
+  PropertiesService.getScriptProperties().setProperty(PROP_INTENTOS, String(intento));
+  if (intento > MAX_INTENTOS) {
+    borrarContinuaciones();
+    avisar(
+      'Construccion detenida',
+      'Van ' + (intento - 1) + ' intentos y sigue sin terminar, asi que dejo de reintentar ' +
+        'para no estar rearmando disparadores sin fin.\n\n' +
+        'Mira Ejecuciones en el editor de Apps Script: ahi esta el error concreto.\n\n' +
+        'Cuando lo tengas, "Rehacer el tracker desde cero" vuelve a empezar.',
+    );
+    return;
+  }
+  armarRedDeSeguridad();
 
   // El mes en curso primero: en cuanto esta, ya puedes empezar a marcar.
   const mesActual = 'mes-' + MESES[new Date().getMonth()];
