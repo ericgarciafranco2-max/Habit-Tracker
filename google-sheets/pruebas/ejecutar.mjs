@@ -128,6 +128,38 @@ comprobar('manda el informe semanal', correos.length === 2, correos.length + ' c
 comprobar('el informe lleva el porcentaje',
   correos.length > 1 && /\d+%/.test(correos[1].htmlBody), 'sin porcentaje');
 
+/* --------------------- Auditoria cruzada ------------------------------- */
+// Dos amigos que se auditan reciben cada uno el informe del otro. Sin nombre
+// son dos correos titulados igual y no se sabe cual es de quien. Y el email
+// del auditor se pone en Ajustes: el contrato de Presion solo lo refleja, que
+// escrito en dos sitios acababa relleno en el que nadie lee.
+{
+  const ajustes = libro.getSheetByName('Ajustes');
+  ajustes.getRange(5, 2).setValue('Eric');
+  ajustes.getRange(9, 2).setValue('auditor@example.com');
+  correos.length = 0;
+  api.informeSemanal();
+  comprobar('el informe va a ti y a tu auditor',
+    correos.length === 1 && correos[0].to.indexOf('auditor@example.com') >= 0,
+    correos.length ? correos[0].to : 'sin correo');
+  comprobar('y lleva tu nombre, para saber de quien es',
+    correos.length === 1 && correos[0].subject.indexOf('Eric') > 0,
+    correos.length ? correos[0].subject : 'sin correo');
+
+  const presion = libro.getSheetByName('Presion');
+  const contrato = presion.formulas.filter((f) => f.col === 2 && (f.fila === 7 || f.fila === 10));
+  comprobar('el contrato refleja Ajustes en vez de duplicarlo',
+    contrato.length === 2 && contrato.every((f) => f.f.indexOf('Ajustes!$B$') > 0),
+    contrato.map((f) => f.f).join(' | ') || 'son valores escritos a mano');
+  comprobar('y apunta a las filas correctas de Ajustes',
+    contrato.some((f) => f.fila === 10 && f.f.indexOf('$B$9') > 0) &&
+    contrato.some((f) => f.fila === 7 && f.f.indexOf('$B$10') > 0),
+    contrato.map((f) => f.fila + '->' + f.f).join(' | '));
+
+  ajustes.getRange(5, 2).setValue('');
+  ajustes.getRange(9, 2).setValue('');
+}
+
 api.verificar();
 comprobar('la comprobacion integrada responde', alertas.length > 0 && alertas.join(' ').indexOf('habitos configurados') > 0,
   alertas[alertas.length - 1]);

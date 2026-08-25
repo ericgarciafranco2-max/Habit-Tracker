@@ -75,6 +75,30 @@ significa "no he caido", asi que sin este corte diciembre aparecia al 100% en
 agosto. El mes en curso solo cuenta hasta hoy, y ningun mes cuenta dias
 anteriores a `Empezado el`.
 
+## Auditoria cruzada: tu amigo y tu
+
+El unico sitio donde se pone el auditor es **`Ajustes` → `Email de tu auditor`**.
+El contrato de la pestaña `Presion` solo lo *refleja*: ahi se ve, pero se cambia
+en Ajustes.
+
+Para auditaros mutuamente, cada uno en **su propia hoja**:
+
+1. `Ajustes → Tu nombre`: tu nombre. Es lo que distingue tu informe del suyo en
+   la bandeja de entrada.
+2. `Ajustes → Email de tu auditor`: el email **del otro**. Tu pones el suyo, el
+   pone el tuyo.
+3. `Ajustes → Minimo semanal exigido (%)`: el liston del que vais a hablar.
+   Poned el mismo.
+4. Menu **⚡ Habit Tracker → Activar avisos automaticos**, los dos.
+
+Cada domingo a las 20:00, cada uno manda su informe a los dos: porcentaje de la
+semana, dias perfectos, los tres habitos que mas ha fallado con el numero de
+fallos, la deuda pendiente y si el contrato queda **CUMPLIDO** o **INCUMPLIDO**.
+No hay forma de maquillarlo: sale de lo que marcaste, no de lo que cuentes.
+
+Para probarlo sin esperar al domingo: **⚡ Habit Tracker → Enviar informe
+semanal**.
+
 ## Lo que aqui sale mejor que en la aplicacion
 
 **Los avisos llegan de verdad.** Un navegador no despierta a una web cerrada

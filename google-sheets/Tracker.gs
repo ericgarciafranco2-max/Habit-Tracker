@@ -105,6 +105,33 @@ function letraColumna(n) {
  * cabecera y se perdia al escribir la tabla.
  */
 const FILA_HABITOS = 15;
+/**
+ * El bloque de configuracion de Ajustes: etiqueta y valor por defecto.
+ *
+ * Vive aqui arriba porque otras pestañas necesitan apuntar a estas celdas, y
+ * con la fila escrita a mano en dos sitios basta con mover una linea para que
+ * el contrato de Presion enseñe el email equivocado.
+ */
+const CONFIG = [
+  ['Tu nombre', ''],
+  ['Año', 0],
+  ['Hora de corte del dia', '04:00'],
+  ['Email para los avisos', ''],
+  ['Email de tu auditor', ''],
+  ['Minimo semanal exigido (%)', 85],
+  ['Congelaciones al mes', 2],
+  ['Empezado el', ''],
+];
+const FILA_CONFIG = 5;
+
+/** Referencia absoluta a una celda de configuracion: Ajustes!$B$9. */
+function celdaConfig(clave) {
+  for (let i = 0; i < CONFIG.length; i++) {
+    if (CONFIG[i][0] === clave) return HOJA_AJUSTES + '!$B$' + (FILA_CONFIG + i);
+  }
+  return HOJA_AJUSTES + '!$B$1';
+}
+
 /** Fila donde empieza la rejilla de hábitos en cada mes. */
 const FILA_REJILLA = 4;
 const MAX_HABITOS = 25;
@@ -509,27 +536,19 @@ function construirAjustes(ss, año) {
   const h = hojaLimpia(ss, HOJA_AJUSTES, FILA_HABITOS + MAX_HABITOS + 6, 16);
   titulo(h, 'Ajustes', 'Cambia aqui lo que quieras. Todo lo demas se recalcula solo.', 14);
 
-  const config = [
-    ['Tu nombre', ''],
-    ['Año', año],
-    ['Hora de corte del dia', '04:00'],
-    ['Email para los avisos', ''],
-    ['Email de tu auditor', ''],
-    ['Minimo semanal exigido (%)', 85],
-    ['Congelaciones al mes', 2],
-    ['Empezado el', ''],
-  ];
+  const config = CONFIG.map(function (f) { return [f[0], f[1]]; });
+  config[1][1] = año;
   h.getRange(4, 1).setValue('CONFIGURACION').setFontWeight('bold').setFontColor(C.suave).setFontSize(10);
   // Si ya habia una fecha de inicio, se respeta: rehacer el tracker no puede
   // borrar desde cuando llevas registrando.
   const inicioPrevio = leerConfig('Empezado el');
-  config[7][1] = inicioPrevio || new Date();
-  h.getRange(5, 1, config.length, 2).setValues(config);
-  h.getRange(5 + config.length - 1, 2).setNumberFormat('dd/mm/yyyy');
-  h.getRange(5, 1, config.length, 1).setFontColor(C.suave);
-  h.getRange(5, 2, config.length, 1).setBackground(C.fondo).setFontWeight('bold');
-  h.getRange(6, 2).setNumberFormat('0');
-  h.getRange(10, 2).setNumberFormat('0');
+  config[config.length - 1][1] = inicioPrevio || new Date();
+  h.getRange(FILA_CONFIG, 1, config.length, 2).setValues(config);
+  h.getRange(FILA_CONFIG + config.length - 1, 2).setNumberFormat('dd/mm/yyyy');
+  h.getRange(FILA_CONFIG, 1, config.length, 1).setFontColor(C.suave);
+  h.getRange(FILA_CONFIG, 2, config.length, 1).setBackground(C.fondo).setFontWeight('bold');
+  h.getRange(FILA_CONFIG + 1, 2).setNumberFormat('0');
+  h.getRange(FILA_CONFIG + 5, 2).setNumberFormat('0');
 
   const cols = ['Icono', 'Habito', 'Categoria', 'Tipo', 'Medida', 'Objetivo', 'Minimo',
     'Unidad', 'Cuando', 'Innegociable', 'Peso', 'Deuda si fallo', 'Unidad deuda', 'Notas'];
@@ -1475,17 +1494,30 @@ function construirPresion(ss) {
   const contrato = [
     ['Desde', ''],
     ['Hasta', ''],
-    ['Minimo semanal exigido (%)', 85],
+    ['Minimo semanal exigido (%)', ''],
     ['Que pasa exactamente si fallo', ''],
     ['Mi auditor', ''],
     ['Su email', ''],
     ['Firmado el', ''],
   ];
   h.getRange(5, 1, contrato.length, 2).setValues(contrato);
+  // El umbral y el email del auditor NO se escriben aqui: se reflejan desde
+  // Ajustes, que es de donde los lee el informe. Tenerlos escritos en dos
+  // sitios significa rellenar el de Presion y que el correo no le llegue a
+  // nadie, que es exactamente lo que pasaba.
+  h.getRange(7, 2).setFormula('=' + celdaConfig('Minimo semanal exigido (%)'));
+  h.getRange(10, 2).setFormula('=' + celdaConfig('Email de tu auditor'));
+  h.getRange(7, 2).setFontColor(C.suave);
+  h.getRange(10, 2).setFontColor(C.suave);
   h.getRange(5, 1, contrato.length, 1).setFontColor(C.suave);
   h.getRange(5, 2, contrato.length, 4).setBackground(C.fondo);
   h.getRange(8, 2, 1, 4).merge().setWrap(true);
   h.setRowHeight(8, 46);
+  nota(h, 12,
+    'El umbral y el email del auditor salen de Ajustes: cambialos alli, aqui solo se ven.\n' +
+    'Auditoria cruzada: si tu auditor tambien tiene el tracker, cada uno pone el email del otro en su ' +
+    'propia hoja (Ajustes > Email de tu auditor). Cada domingo os llega el informe del otro con el ' +
+    'porcentaje, los habitos que mas fallais y si el contrato se ha cumplido.');
 
   h.getRange(14, 1).setValue('PENITENCIAS')
     .setFontWeight('bold').setFontColor(C.suave).setFontSize(10);
@@ -1730,9 +1762,12 @@ function informeSemanal() {
     : ratio >= 0.6 ? 'Semana mediocre. Reduce habitos y cumple los que queden.'
     : 'Semana rota. Vuelve a los innegociables y nada mas.';
 
+  // Con auditoria cruzada los dos recibis el informe del otro. Sin el nombre,
+  // son dos correos titulados igual y no se sabe cual es de quien.
+  const quien = String(leerConfig('Tu nombre') || '').trim();
   const cuerpo =
     '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;color:#1d1d1f">' +
-    '<h2 style="margin:0 0 16px">Informe de la semana</h2>' +
+    '<h2 style="margin:0 0 16px">Informe de la semana' + (quien ? ' · ' + quien : '') + '</h2>' +
     '<p style="font-size:34px;font-weight:700;margin:0;color:' + (cumple ? C.bien : C.malo) + '">' +
     Math.round(ratio * 100) + '%</p>' +
     '<p style="color:#6e6e73;margin:0 0 18px">Minimo del contrato: ' + umbral + '% · ' +
@@ -1750,7 +1785,11 @@ function informeSemanal() {
   const auditor = String(leerConfig('Email de tu auditor') || '');
   const destinos = [mio, auditor].filter(function (x) { return x; }).join(',');
   if (destinos) {
-    MailApp.sendEmail({ to: destinos, subject: 'Informe semanal: ' + Math.round(ratio * 100) + '%', htmlBody: cuerpo });
+    MailApp.sendEmail({
+      to: destinos,
+      subject: 'Informe semanal' + (quien ? ' de ' + quien : '') + ': ' + Math.round(ratio * 100) + '%',
+      htmlBody: cuerpo,
+    });
   }
   apuntarHistorial(fechaISO(hoy), 'Informe', 'Semana al ' + Math.round(ratio * 100) + '%');
 }
