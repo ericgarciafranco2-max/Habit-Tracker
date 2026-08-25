@@ -184,17 +184,19 @@ function onOpen() {
   const ui = interfaz();
   if (!ui) return;
   ui.createMenu('⚡ Habit Tracker')
-    .addItem('Crear / rehacer el tracker', 'crearTracker')
-    .addSeparator()
-    .addItem('Continuar la construccion', 'crearTracker')
+    // Lo primero es lo que se usa a diario; reconstruir queda al final,
+    // separado, porque tarda minutos y casi nunca hace falta.
+    .addItem('Actualizar tras cambiar habitos', 'actualizar')
     .addItem('Preparar el dia de hoy', 'prepararHoy')
-    .addItem('Recalcular todo', 'recalcularTodo')
     .addSeparator()
+    .addItem('Crear o continuar el tracker', 'crearTracker')
     .addItem('Liquidar el dia de ayer', 'liquidarAyer')
     .addItem('Enviar informe semanal', 'informeSemanal')
     .addSeparator()
     .addItem('Activar avisos automaticos', 'activarAvisos')
     .addItem('Comprobar que todo esta bien', 'verificar')
+    .addSeparator()
+    .addItem('Rehacer el tracker desde cero', 'rehacerTracker')
     .addToUi();
   try {
     prepararHoy();
@@ -298,6 +300,36 @@ function trabajoDeFase(ss, año, fase) {
   return mapa[fase];
 }
 
+/**
+ * Lo que hay que ejecutar despues de tocar los habitos en Ajustes.
+ *
+ * No reconstruye nada: solo recalcula y rehace la lista de Hoy. Reconstruir
+ * las veinte pestañas por cambiar un habito son dos pasadas de varios minutos
+ * para nada.
+ */
+function actualizar() {
+  recalcularTodo();
+  prepararHoy();
+  avisar('Actualizado', 'Hoy y el Panel ya reflejan tus habitos.');
+}
+
+/** Tira la estructura y la vuelve a levantar. Solo si algo esta roto. */
+function rehacerTracker() {
+  const ui = interfaz();
+  if (ui) {
+    const r = ui.alert(
+      'Rehacer desde cero',
+      'Se rehace la estructura de las veinte pestañas. Tarda varios minutos y puede ' +
+        'necesitar un par de pasadas.\n\nTus marcas NO se borran.\n\n' +
+        'Si solo has cambiado habitos, no hace falta: usa "Actualizar tras cambiar habitos".\n\n¿Sigo?',
+      ui.ButtonSet.YES_NO,
+    );
+    if (r !== ui.Button.YES) return;
+  }
+  reiniciarProgreso();
+  crearTracker();
+}
+
 function crearTracker() {
   const ss = SpreadsheetApp.getActive();
   if (!ss) {
@@ -315,16 +347,15 @@ function crearTracker() {
   let hechas = fasesHechas();
   const reanudando = hechas.length > 0 && hechas.length < FASES.length;
 
+  // Ya estaba todo montado: lo util es refrescar, no reconstruir. Antes,
+  // darle a Ejecutar despues de cambiar un habito rehacia las veinte pestañas
+  // y se comia el limite de tiempo.
+  if (hechas.length >= FASES.length && ss.getSheetByName(HOJA_AJUSTES)) {
+    actualizar();
+    return;
+  }
+
   if (!reanudando) {
-    if (ss.getSheetByName(HOJA_AJUSTES) && ui) {
-      const r = ui.alert(
-        'Rehacer el tracker',
-        'Ya hay un tracker en esta hoja. Se rehara la estructura.\n\n' +
-          'Tus marcas de los meses NO se tocan, pero si has añadido pestañas propias, mejor haz una copia antes.\n\n¿Sigo?',
-        ui.ButtonSet.YES_NO,
-      );
-      if (r !== ui.Button.YES) return;
-    }
     reiniciarProgreso();
     hechas = [];
     ss.setSpreadsheetTimeZone(ss.getSpreadsheetTimeZone() || 'Europe/Madrid');
@@ -800,9 +831,16 @@ function onEdit(e) {
   try {
     if (!e || !e.range) return;
     const hoja = e.range.getSheet();
-    if (hoja.getName() !== HOJA_HOY) return;
     const fila = e.range.getRow();
     const col = e.range.getColumn();
+
+    // Cambiar un habito en Ajustes deberia notarse sin ejecutar nada. Este
+    // disparador tambien salta editando desde la app del movil.
+    if (hoja.getName() === HOJA_AJUSTES && fila >= FILA_HABITOS) {
+      prepararHoy();
+      return;
+    }
+    if (hoja.getName() !== HOJA_HOY) return;
 
     if (col === 2 && fila >= 11) {
       const ref = hoja.getRange(fila, 6, 1, 3).getValues()[0];

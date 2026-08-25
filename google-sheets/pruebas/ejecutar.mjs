@@ -14,7 +14,7 @@ import { entorno, libro, correos, alertas, contador, reiniciarContador } from '.
 
 const codigo = fs.readFileSync(new URL('../Tracker.gs', import.meta.url), 'utf8');
 const ctx = vm.createContext({ ...entorno, Date, Math, Object, String, Number, Array, JSON, RegExp, isNaN });
-vm.runInContext(codigo + '\n;globalThis.__api = { crearTracker, recalcularTodo, prepararHoy, liquidarAyer, informeSemanal, recordatorioDiario, onEdit, verificar, leerHabitos, leerConfig, estadoDelDia, leerAño, textoDeuda, calcularRacha, exigiblesDelMes, cumplido, aplicaHoy, fechaInicio };', ctx);
+vm.runInContext(codigo + '\n;globalThis.__api = { crearTracker, recalcularTodo, prepararHoy, liquidarAyer, informeSemanal, recordatorioDiario, onEdit, verificar, leerHabitos, leerConfig, estadoDelDia, leerAño, textoDeuda, calcularRacha, exigiblesDelMes, cumplido, aplicaHoy, fechaInicio, actualizar, fasesHechas, FILA_HABITOS };', ctx);
 const api = ctx.__api;
 
 let fallos = 0;
@@ -177,6 +177,29 @@ try {
     api.leerHabitos()[0], new Date().getMonth(), new Date().getFullYear(), new Date(), desde);
   comprobar('los dias exigibles se cuentan desde que empezaste', exigibles <= 1,
     exigibles + ' dias exigibles el mes en que empiezas');
+}
+
+/* --------------- Cambiar habitos no reconstruye la hoja ---------------- */
+// Volver a ejecutar crearTracker con todo ya montado rehacia las veinte
+// pestañas: dos pasadas de varios minutos por cambiar un nombre. Ahora
+// refresca y punto.
+{
+  reiniciarContador();
+  api.crearTracker();
+  const trasSegundaLlamada = contador.total;
+  comprobar('con el tracker ya montado, crearTracker solo refresca',
+    trasSegundaLlamada < 300, trasSegundaLlamada + ' operaciones (una construccion son ~900)');
+  comprobar('y no borra el progreso',
+    api.fasesHechas().length >= 20, api.fasesHechas().length + ' fases marcadas');
+
+  // Editar un habito en Ajustes refresca la pestaña Hoy sin tocar nada mas.
+  const ajustes = libro.getSheetByName('Ajustes');
+  ajustes.getRange(api.FILA_HABITOS + 1, 2).setValue('Levantarme temprano');
+  api.onEdit({ range: ajustes.getRange(api.FILA_HABITOS + 1, 2) });
+  const hojaHoy2 = libro.getSheetByName('Hoy');
+  comprobar('cambiar un habito se refleja solo en Hoy',
+    String(hojaHoy2.getRange(11, 1).getValue()).indexOf('temprano') > 0,
+    hojaHoy2.getRange(11, 1).getValue());
 }
 
 /* ------------------- Idioma de la hoja y separadores -------------------- */
